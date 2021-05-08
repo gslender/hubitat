@@ -13,12 +13,12 @@
  *
  * =======================================================================================
  *
- *  Last modified: 2021-04-21
+ *  Last modified: 2021-05-09
  *
  */ 
  
 metadata {
-   definition (name: "Nue ZigBee Smart Fan Light Switch", namespace: "gslender", author: "Grant Slender", importUrl: "https://raw.githubusercontent.com/gslender/hubitat/nue-zigbee-smart-fan-light-switch.groovy") {
+   definition (name: "Nue ZigBee Smart Fan Light Switch", namespace: "gslender", author: "Grant Slender", importUrl: "https://raw.githubusercontent.com/gslender/hubitat/main/nue-zigbee-smart-fan-light-switch.groovy") {
       
       capability "Refresh"
       capability "Configuration"
@@ -99,19 +99,17 @@ void parse(String description) {
     
     if (ssMap.sourceEndpoint == 0x01) {
         name = "light"
-        getChildDeviceParse("${device.deviceNetworkId}-Light-Switch","switch",value)
+        getChildDeviceParse("${device.deviceNetworkId}-Light","switch",value)
     } else {
         name = "fan"
-        if (ssMap.sourceEndpoint == 0x02) {
-            getChildDeviceParse("${device.deviceNetworkId}-FanHigh-Switch","switch",value)     
+        getChildDeviceParse("${device.deviceNetworkId}-Fan","switch",value) 
+        if (ssMap.sourceEndpoint == 0x02) {    
             value = "high"       
         }
         if (ssMap.sourceEndpoint == 0x03) {
-            getChildDeviceParse("${device.deviceNetworkId}-FanMed-Switch","switch",value)  
             value = "med"
         }
-        if (ssMap.sourceEndpoint == 0x04) {
-            getChildDeviceParse("${device.deviceNetworkId}-FanLow-Switch","switch",value)  
+        if (ssMap.sourceEndpoint == 0x04) {  
             value = "low"
         }
         if (rawValue == 0) value = "off"
@@ -150,11 +148,6 @@ def List<String> configure() {
     }
     
     addChildType("Light","Switch")
-    /*
-    addChildType("FanLow","Switch")
-    addChildType("FanMed","Switch")
-    addChildType("FanHigh","Switch")
-    */
     addChildType("Fan","Fan")
     state.comments = "Child devices created!"
     return
@@ -166,7 +159,6 @@ def addChildType(String label, String type) {
     def devLabel = device.label
     if (devLabel == null) devLabel = device.name
     
-    // log.debug "configure()"
     switch (type) {
         case "Switch":
         addChildDevice("hubitat","Generic Component Switch", "${device.deviceNetworkId}-${label}", [label: "${devLabel}-${label}",name: "${device.name}-${label}", isComponent: true])
@@ -198,14 +190,14 @@ def getChildDeviceParse(child,_name,_value) {
 def lightOn() {
     if (enableDebug) log.debug "lightOn()"
     sendEvent(name: "light", value: "on")
-    getChildDeviceParse("${device.deviceNetworkId}-Light-Switch","switch","on")
+    getChildDeviceParse("${device.deviceNetworkId}-Light","switch","on")
     sendHubCommand(new hubitat.device.HubAction("he cmd 0x${device.deviceNetworkId} 0x01 0x0006 0x1 {}", hubitat.device.Protocol.ZIGBEE))
 }
 
 def lightOff() {
     if (enableDebug) log.debug "lightOff()"
     sendEvent(name: "light", value: "off")
-    getChildDeviceParse("${device.deviceNetworkId}-Light-Switch","switch","off")
+    getChildDeviceParse("${device.deviceNetworkId}-Light","switch","off")
     sendHubCommand(new hubitat.device.HubAction("he cmd 0x${device.deviceNetworkId} 0x01 0x0006 0x0 {}", hubitat.device.Protocol.ZIGBEE))
 }
 
@@ -213,12 +205,7 @@ def fanOff(){
     if (enableDebug) log.debug "fanOff()"  
     sendEvent(name: "fan", value: "off")
     
-    getChildDeviceParse("${device.deviceNetworkId}-FanHigh-Switch","switch","off")
-    getChildDeviceParse("${device.deviceNetworkId}-FanMed-Switch","switch","off")
-    getChildDeviceParse("${device.deviceNetworkId}-FanLow-Switch","switch","off")
-//    getChildDevices().each {
-  //      it.parse([[name:"switch", value:"off", descriptionText:"${it.displayName} was turned off"]])
-   // }    
+    getChildDeviceParse("${device.deviceNetworkId}-Fan","fan","off")
     sendHubCommand(new hubitat.device.HubAction("he cmd 0x${device.deviceNetworkId} 0x02 0x0006 0x0 {}", hubitat.device.Protocol.ZIGBEE))
     sendHubCommand(new hubitat.device.HubAction("he cmd 0x${device.deviceNetworkId} 0x03 0x0006 0x0 {}", hubitat.device.Protocol.ZIGBEE))
     sendHubCommand(new hubitat.device.HubAction("he cmd 0x${device.deviceNetworkId} 0x04 0x0006 0x0 {}", hubitat.device.Protocol.ZIGBEE))
@@ -227,21 +214,21 @@ def fanOff(){
 def fanHighOn(){
     if (enableDebug) log.debug "fanHighOn()"  
     sendEvent(name: "fan", value: "high")
-    getChildDeviceParse("${device.deviceNetworkId}-FanHigh-Switch","switch","on")
+    getChildDeviceParse("${device.deviceNetworkId}-Fan","fan","high")
     sendHubCommand(new hubitat.device.HubAction("he cmd 0x${device.deviceNetworkId} 0x02 0x0006 0x1 {}", hubitat.device.Protocol.ZIGBEE))
 }
 
 def fanMedOn(){
     if (enableDebug) log.debug "fanMedOn()"
     sendEvent(name: "fan", value: "med")
-    getChildDeviceParse("${device.deviceNetworkId}-FanMed-Switch","switch","on")
+    getChildDeviceParse("${device.deviceNetworkId}-Fan","fan","med")
     sendHubCommand(new hubitat.device.HubAction("he cmd 0x${device.deviceNetworkId} 0x03 0x0006 0x1 {}", hubitat.device.Protocol.ZIGBEE))
 }
 
 def fanLowOn(){
     if (enableDebug) log.debug "fanLowOn()"
     sendEvent(name: "fan", value: "low")
-    getChildDeviceParse("${device.deviceNetworkId}-FanLow-Switch","switch","on")
+    getChildDeviceParse("${device.deviceNetworkId}-Fan","fan","low")
     sendHubCommand(new hubitat.device.HubAction("he cmd 0x${device.deviceNetworkId} 0x04 0x0006 0x1 {}", hubitat.device.Protocol.ZIGBEE))
 }
 
@@ -255,21 +242,17 @@ void componentRefresh(cd){
 void componentOn(cd){
     if (enableDebug) log.debug "componentOn ${cd.displayName}"
     
-    if (cd.displayName.endsWith("-Light-Switch")) lightOn()
-    if (cd.displayName.endsWith("-FanHigh-Switch")) fanHighOn()
-    if (cd.displayName.endsWith("-FanMed-Switch")) fanMedOn()
-    if (cd.displayName.endsWith("-FanLow-Switch")) fanLowOn()
-    
-//    getChildDevice(cd.deviceNetworkId).parse([[name:"switch", value:"on", descriptionText:"${cd.displayName} was turned on"]])
+    if (cd.displayName.endsWith("-Light")) lightOn()
+    if (cd.displayName.endsWith("-Fan")) fanHighOn()
+    if (cd.displayName.endsWith("-Fan")) fanMedOn()
+    if (cd.displayName.endsWith("-Fan")) fanLowOn()
 }
 
 void componentOff(cd){
     if (enableDebug) log.debug "componentOff ${cd.displayName}"
     
-    if (cd.displayName.endsWith("-Light-Switch")) lightOff()
+    if (cd.displayName.endsWith("-Light")) lightOff()
     else fanOff()
-    
-//    getChildDevice(cd.deviceNetworkId).parse([[name:"switch", value:"off", descriptionText:"${cd.displayName} was turned off"]])
 }
 
 void componentSetSpeed(cd, speed){
