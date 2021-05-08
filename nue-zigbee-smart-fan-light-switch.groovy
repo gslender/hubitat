@@ -161,7 +161,7 @@ def addChildType(String label, String type) {
     
     switch (type) {
         case "Switch":
-        addChildDevice("hubitat","Generic Component Switch", "${device.deviceNetworkId}-${label}", [label: "${devLabel}-${label}",name: "${device.name}-${label}", isComponent: true])
+            addChildDevice("hubitat","Generic Component Switch", "${device.deviceNetworkId}-${label}", [label: "${devLabel}-${label}",name: "${device.name}-${label}", isComponent: true])
             break
         
         case "Fan":
@@ -255,30 +255,41 @@ void componentOff(cd){
     else fanOff()
 }
 
-void componentSetSpeed(cd, speed){
-    if (enableDebug) log.debug "componentSetSpeed ${cd.displayName} ${speed}"
+String componentSetSpeed(cd, speed){
+    if (enableDebug) log.debug "componentSetSpeed (${cd.displayName}, ${speed})"
     
     if (speed == "off") fanOff()
 }
 
+String componentCycleSpeed(cd){
+    if (enableDebug) log.debug "componentCycleSpeed (${cd.displayName})"
+    
+    String currentSpeed = "off"
+    
+    if (cd) currentSpeed = cd.currentValue("speed") ?: "off"
+    switch (currentSpeed) {
+       case "off":
+          return componentSetLevel(cd, 33)
+       break
+       case "low":
+          return componentSetLevel(cd, 66)
+       break
+       case "medium-low":
+       case "medium":
+       case "medium-high":
+          return componentSetLevel(cd, 99)
+       break
+       case "high":
+          return componentOff(cd)
+       break
+    }
+}
 
-void componentSetLevel(cd, level){
-    if (enableDebug) log.debug "componentSetLevel ${cd.displayName} ${level}"
+String componentSetLevel(cd, level){
+    if (enableDebug) log.debug "componentSetLevel (${cd.displayName}, ${level})"
     
     if (level < 1) fanOff()
     if (level > 0 && level < 34) fanLowOn()
     if (level > 33 && level < 67) fanMedOn()
     if (level > 66) fanHighOn()
-}
-
-
-def doSendEvent(Map eventData, Boolean forceStateChange=false) {
-   if (enableDebug) log.debug("doSendEvent(${eventData}...")
-   String descriptionText = "${device.displayName} ${eventData.name} is ${eventData.value}${eventData.unit ?: ''}"
-   if (enableDesc && (device.currentValue(eventData.name) != eventData.value || eventData.isStateChange)) log.info(descriptionText)
-   Map eventProperties = [name: eventData.name, value: eventData.value, descriptionText: descriptionText,
-      unit: eventData.unit, phyiscal: eventData.physical, digital: eventData.digital,
-      isStateChange: eventData.isStateChange]
-   if (forceStateChange) eventProperties["isStateChange"] = true
-   sendEvent(eventProperties)
 }
