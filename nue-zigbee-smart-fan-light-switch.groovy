@@ -96,9 +96,12 @@ void parse(String description) {
     
     def ssMap = zigbee.parse(description)
     if (ssMap.sourceEndpoint == 0x01) {
+        
         name = "light"
         getChildDeviceParse("${device.deviceNetworkId}-Light","switch",value)
+    
     } else {
+        
         if (ssMap.sourceEndpoint == 0x02) {    
             name = "fan-high-switch"       
         }
@@ -108,8 +111,8 @@ void parse(String description) {
         if (ssMap.sourceEndpoint == 0x04) {  
             name = "fan-low-switch"
         }
-            
-        //getChildDeviceParse("${device.deviceNetworkId}-Fan","speed",value) 
+        
+        runInMillis(100, 'calcChildFanSpeed')
     }
     
     descriptionText = "${device.displayName} ${name} was turned ${value}"
@@ -151,7 +154,31 @@ def List<String> configure() {
 
 /* ======== custom commands and methods ======== */
 
+def calcChildFanSpeed() {
+    if (enableDebug) log.debug "calcChildFanSpeed()"
+    
+    def fanspeed = "off"
+    def fanswitch = "off"
+    
+    
+    if (device.currentValue("fan-high-switch") == "on") {
+        fanspeed = "high"
+        fanswitch = "on"
+    }
+    if (device.currentValue("fan-medium-switch") == "on") {
+        fanspeed = "medium"
+        fanswitch = "on"
+    }
+    if (device.currentValue("fan-low-switch") == "on") {
+        fanspeed = "low"
+        fanswitch = "on"
+    }
+    getChildDeviceParse("${device.deviceNetworkId}-Fan","speed",fanspeed) 
+    getChildDeviceParse("${device.deviceNetworkId}-Fan","switch",fanswitch) 
+}
+
 def addChildType(String label, String type) {
+    if (enableDebug) log.debug "addChildType(${label},${type})" 
     def devLabel = device.label
     if (devLabel == null) devLabel = device.name
     
@@ -239,9 +266,6 @@ void componentOn(cd){
     if (enableDebug) log.debug "componentOn ${cd.displayName}"
     
     if (cd.displayName.endsWith("-Light")) lightOn()
-    if (cd.displayName.endsWith("-Fan")) fanHighOn()
-    if (cd.displayName.endsWith("-Fan")) fanMediumOn()
-    if (cd.displayName.endsWith("-Fan")) fanLowOn()
 }
 
 void componentOff(cd){
