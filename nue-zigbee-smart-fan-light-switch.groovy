@@ -43,14 +43,14 @@ preferences {
       input name: "enableDesc", type: "bool", title: "Enable descriptionText logging", defaultValue: true
    }
 }
-/*
+
 private getCLUSTER_LIGHT_SWITCH() { 0x0001 }
 private getCLUSTER_FAN_HIGH_SWITCH() { 0x0002 }
-private getCLUSTER_FAN_MED_SWITCH() { 0x0003 }
+private getCLUSTER_FAN_MEDIUM_SWITCH() { 0x0003 }
 private getCLUSTER_FAN_LOW_SWITCH() { 0x0004 }
 private getCOMMAND_OFF() { 0x00 }
 private getCOMMAND_ON() { 0x01 }
-*/
+
 /* ======== driver built-in callback methods ======== */
 /* https://docs.hubitat.com/index.php?title=Device_Code */
 
@@ -67,17 +67,17 @@ void uninstalled(){
 
 void updated() {
    log.info "updated..."
-   initialize()
+   log.warn "debug logging is: ${enableDebug == true}"
+   log.warn "description logging is: ${enableDesc == true}"
 }
 
 void initialize() {
-   if (enableDebug) log.debug "Initializing"    
-   log.warn "debug logging is: ${enableDebug == true}"
-   log.warn "description logging is: ${enableDesc == true}"
+   log.info "initialize..."    
    device.setName("NUE-ZBFLB")
+   updated();
    configure()
    unschedule()
-//    if (enableDebug) runIn(1800,logsOff)
+   if (enableDebug) runIn(1800,logsOff)
 }
 
 void parse(String description) {
@@ -95,20 +95,20 @@ void parse(String description) {
     def name
     
     def ssMap = zigbee.parse(description)
-    if (ssMap.sourceEndpoint == 0x01) {
+    if (ssMap.sourceEndpoint == CLUSTER_LIGHT_SWITCH) {
         
         name = "light"
         getChildDeviceParse("${device.deviceNetworkId}-Light","switch",value)
     
     } else {
         
-        if (ssMap.sourceEndpoint == 0x02) {    
+        if (ssMap.sourceEndpoint == CLUSTER_FAN_HIGH_SWITCH) {    
             name = "fan-high-switch"       
         }
-        if (ssMap.sourceEndpoint == 0x03) {
+        if (ssMap.sourceEndpoint == CLUSTER_FAN_MEDIUM_SWITCH) {
             name = "fan-medium-switch"
         }
-        if (ssMap.sourceEndpoint == 0x04) {  
+        if (ssMap.sourceEndpoint == CLUSTER_FAN_LOW_SWITCH) {  
             name = "fan-low-switch"
         }
         
@@ -128,10 +128,10 @@ def refresh() {
    if (enableDebug) log.debug "refresh()"
     
    [
-       "he rattr 0x${device.deviceNetworkId} 0x01 0x0006 0x0", "delay 20", // light
-       "he rattr 0x${device.deviceNetworkId} 0x02 0x0006 0x0", "delay 20", // fan-high
-       "he rattr 0x${device.deviceNetworkId} 0x03 0x0006 0x0", "delay 20", // fan-medium
-       "he rattr 0x${device.deviceNetworkId} 0x04 0x0006 0x0", "delay 20", // fan-low
+       "he rattr 0x${device.deviceNetworkId} ${CLUSTER_LIGHT_SWITCH} 0x0006 0x0", "delay 20", // light
+       "he rattr 0x${device.deviceNetworkId} ${CLUSTER_FAN_HIGH_SWITCH} 0x0006 0x0", "delay 20", // fan-high
+       "he rattr 0x${device.deviceNetworkId} ${CLUSTER_FAN_MEDIUM_SWITCH} 0x0006 0x0", "delay 20", // fan-medium
+       "he rattr 0x${device.deviceNetworkId} ${CLUSTER_FAN_LOW_SWITCH} 0x0006 0x0", "delay 20", // fan-low
    ]
 }
 
@@ -212,47 +212,44 @@ def getChildDeviceParse(_childname,_attrib,_value) {
 
 def lightOn() {
     if (enableDebug) log.debug "lightOn()"
-//    sendEvent(name: "light", value: "on")
     getChildDeviceParse("${device.deviceNetworkId}-Light","switch","on")
-    sendHubCommand(new hubitat.device.HubAction("he cmd 0x${device.deviceNetworkId} 0x01 0x0006 0x1 {}", hubitat.device.Protocol.ZIGBEE))
+    sendHubCommand(new hubitat.device.HubAction("he cmd 0x${device.deviceNetworkId} ${CLUSTER_LIGHT_SWITCH} 0x0006 ${COMMAND_ON} {}", hubitat.device.Protocol.ZIGBEE))
 }
 
 def lightOff() {
     if (enableDebug) log.debug "lightOff()"
-//    sendEvent(name: "light", value: "off")
     getChildDeviceParse("${device.deviceNetworkId}-Light","switch","off")
-    sendHubCommand(new hubitat.device.HubAction("he cmd 0x${device.deviceNetworkId} 0x01 0x0006 0x0 {}", hubitat.device.Protocol.ZIGBEE))
+    sendHubCommand(new hubitat.device.HubAction("he cmd 0x${device.deviceNetworkId} ${CLUSTER_LIGHT_SWITCH} 0x0006 ${COMMAND_OFF} {}", hubitat.device.Protocol.ZIGBEE))
 }
 
 def fanOff(){
     if (enableDebug) log.debug "fanOff()"  
-//    sendEvent(name: "fan", value: "off")
     
     getChildDeviceParse("${device.deviceNetworkId}-Fan","speed","off")
-    sendHubCommand(new hubitat.device.HubAction("he cmd 0x${device.deviceNetworkId} 0x02 0x0006 0x0 {}", hubitat.device.Protocol.ZIGBEE))
-    sendHubCommand(new hubitat.device.HubAction("he cmd 0x${device.deviceNetworkId} 0x03 0x0006 0x0 {}", hubitat.device.Protocol.ZIGBEE))
-    sendHubCommand(new hubitat.device.HubAction("he cmd 0x${device.deviceNetworkId} 0x04 0x0006 0x0 {}", hubitat.device.Protocol.ZIGBEE))
+    sendHubCommand(new hubitat.device.HubAction("he cmd 0x${device.deviceNetworkId} ${CLUSTER_FAN_HIGH_SWITCH} 0x0006 ${COMMAND_OFF} {}", hubitat.device.Protocol.ZIGBEE))
+    sendHubCommand(new hubitat.device.HubAction("he cmd 0x${device.deviceNetworkId} ${CLUSTER_FAN_MEDIUM_SWITCH} 0x0006 ${COMMAND_OFF} {}", hubitat.device.Protocol.ZIGBEE))
+    sendHubCommand(new hubitat.device.HubAction("he cmd 0x${device.deviceNetworkId} ${CLUSTER_FAN_LOW_SWITCH} 0x0006 ${COMMAND_OFF} {}", hubitat.device.Protocol.ZIGBEE))
 }
 
 def fanHighOn(){
     if (enableDebug) log.debug "fanHighOn()"  
 //    sendEvent(name: "fan", value: "high")
     getChildDeviceParse("${device.deviceNetworkId}-Fan","speed","high")
-    sendHubCommand(new hubitat.device.HubAction("he cmd 0x${device.deviceNetworkId} 0x02 0x0006 0x1 {}", hubitat.device.Protocol.ZIGBEE))
+    sendHubCommand(new hubitat.device.HubAction("he cmd 0x${device.deviceNetworkId} ${CLUSTER_FAN_HIGH_SWITCH} 0x0006 ${COMMAND_ON} {}", hubitat.device.Protocol.ZIGBEE))
 }
 
 def fanMediumOn(){
     if (enableDebug) log.debug "fanMediumOn()"
 //    sendEvent(name: "fan", value: "medium")
     getChildDeviceParse("${device.deviceNetworkId}-Fan","speed","medium")
-    sendHubCommand(new hubitat.device.HubAction("he cmd 0x${device.deviceNetworkId} 0x03 0x0006 0x1 {}", hubitat.device.Protocol.ZIGBEE))
+    sendHubCommand(new hubitat.device.HubAction("he cmd 0x${device.deviceNetworkId} ${CLUSTER_FAN_MEDIUM_SWITCH} 0x0006 ${COMMAND_ON} {}", hubitat.device.Protocol.ZIGBEE))
 }
 
 def fanLowOn(){
     if (enableDebug) log.debug "fanLowOn()"
 //    sendEvent(name: "fan", value: "low")
     getChildDeviceParse("${device.deviceNetworkId}-Fan","speed","low")
-    sendHubCommand(new hubitat.device.HubAction("he cmd 0x${device.deviceNetworkId} 0x04 0x0006 0x1 {}", hubitat.device.Protocol.ZIGBEE))
+    sendHubCommand(new hubitat.device.HubAction("he cmd 0x${device.deviceNetworkId} ${CLUSTER_FAN_LOW_SWITCH} 0x0006 ${COMMAND_ON} {}", hubitat.device.Protocol.ZIGBEE))
 }
 
 
@@ -282,6 +279,8 @@ String componentSetSpeed(cd, speed){
        case "off":
           fanOff()
        break
+       case "on":
+          if (cd && cd.currentValue("switch") != "off") break
        case "low":
           fanLowOn()
        break
