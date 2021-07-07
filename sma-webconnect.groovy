@@ -21,7 +21,7 @@ import groovy.json.JsonOutput
  *
  */ 
 
-@Field Map users = ["user": "usr" ,"installer": "istl"]
+@Field Map usersEnum = ["usr": "user" ,"istl": "installer" ]
 @Field String sma_urlLogin                    = "dyn/login.json"
 @Field String sma_urlLogout                   = "dyn/logout.json"
 @Field String sma_urlValues                   = "dyn/getValues.json"
@@ -50,7 +50,7 @@ metadata {
     preferences {
         if(showLogin != false) {
             section('SMA Webconnect') {
-                input name: 'usergrp', type: 'text',     title: 'User Group',   required: true,  displayDuringSetup: true, description: '<em>SMA User Group</em>'
+                input name: 'usergrp', type: 'enum',     title: 'User Group',  options:usersEnum, required: true,  displayDuringSetup: true, description: '<em>SMA User Group</em>'
                 input name: 'password', type: 'password', title: 'Password',   required: true,  displayDuringSetup: true, description: '<em>SMA Password</em>'
                 input name: 'ip', type: 'text',     title: 'IP Address', required: true, displayDuringSetup: true, description: '<em>SMA Device IP Address</em>'
             }
