@@ -46,6 +46,8 @@ metadata {
         attribute "supportedThermostatFanModes", "JSON_OBJECT"
         attribute "supportedThermostatModes", "JSON_OBJECT"
         
+        command "discoverBridge"
+        
         command "setSpeed", [[name: "Fan speed*",type:"ENUM", description:"Fan speed to set", constraints: getFanLevel.collect {k,v -> k}]]
         
         command "setThermostatMode", [[name: "AC mode*",type:"ENUM", description:"Cooling/heating mode to set", constraints: getModeLevel.collect {k,v -> k}]]
@@ -59,11 +61,12 @@ metadata {
 		    refreshEnum << ["5 min" : "Refresh every 5 minutes"]
 		    refreshEnum << ["15 min" : "Refresh every 15 minutes"]
 		    refreshEnum << ["30 min" : "Refresh every 30 minutes"]
+		    refreshEnum << ["never" : "Never Refresh"]
         input name: "removeChildren", type: "bool", title: "Remove children on Configure", defaultValue: true
         input name: "enableDebug", type: "bool", title: "Enable debug logging", defaultValue: true
         input name: "enableDesc", type: "bool", title: "Enable descriptionText logging", defaultValue: true
-        input name: "ip", type: "string", title:"Bridge IP", defaultValue:"192.168.1.50" , required: true
-        input name: "refresh_Rate", type: "enum", title: "Polling Refresh Rate", options:refreshEnum, defaultValue: "1 min"
+        input name: "ip", type: "string", title:"Bridge IP" , required: true
+        input name: "refresh_Rate", type: "enum", title: "Polling Refresh Rate", options:refreshEnum, defaultValue: "never"
         
         input name: "devcmdbody", type: "string", title:"DEV Only Send Cmd", defaultValue:"{\"SysOn\":1}" 
     }
@@ -103,8 +106,11 @@ void updated() {
 		case "15 min" :
 			runEvery15Minutes(refresh)
 			break
-		default:
+		case "30 min" :
 			runEvery30Minutes(refresh)
+			break
+		default:
+            unschedule()
 	}
 	if (enableDebug) log.debug "runEvery${refresh_Rate}Minute(s) refresh() "
     
@@ -113,22 +119,30 @@ void updated() {
 }
 
 void initialize() {
-   log.info "initialize..." 
-   updated()
+    log.info "initialize..." 
+    discoverBridge()
+    updated()
 }
 
-void parse(String description) {
+void parse(description) {
     if (enableDebug) log.debug "parse() description: ${description}"
+    
+    try {
+        def map = parseDescriptionAsMap(description)
+        def list = hexToASCII(map.get("payload")).tokenize(',')
+        def ip_addr = null
+        list.each {
+            if (it.startsWith("IP_")) {
+                ip_addr = it.reverse().take(it.length()-3).reverse()
+            }
+        }    
+        device.updateSetting("ip",[type:"string", value: ip_addr])
+    } catch (e) {
+        if (enableDebug) log.debug "parse() error $e"
+    }
 }
 
 /* ======== capability commands ======== */
-
-def devSendCmd() {
-    if (enableDebug) log.debug "devSendCmd() devcmdbody: $devcmdbody"
-    sendSimpleiZoneCmd(devcmdbody) 
-    
-    runInMillis(500, 'refresh')
-}
 
 def off() {
     if (enableDebug) log.debug "off()"
@@ -285,7 +299,7 @@ def refresh() {
                 def zonename = "zone${it+1}"
                 if (state.zones[zonename]) state.zones[zonename] = resultZone.ZonesV2
                 def hubitatThermoAttrib = convertiZoneToHubitat(resultZone.ZonesV2)
-                getChildDeviceParse("${device.getDeviceNetworkId()}-$zonename",hubitatThermoAttrib)
+                childSendEvent("${device.getDeviceNetworkId()}-$zonename",hubitatThermoAttrib)
             }  
         }
         
@@ -333,7 +347,7 @@ def List<String> configure() {
                 addChildThermostat(zonename,resultZone.ZonesV2.Name)
                 state.zones.put(zonename, resultZone.ZonesV2)
                 def hubitatThermoAttrib = convertiZoneToHubitat(resultZone.ZonesV2)
-                getChildDeviceParse("${device.getDeviceNetworkId()}-zone${it+1}",hubitatThermoAttrib)
+                childSendEvent("${device.getDeviceNetworkId()}-zone${it+1}",hubitatThermoAttrib)
             }  
         }
         
@@ -356,6 +370,45 @@ def List<String> configure() {
 }
 
 /* ======== custom commands and methods ======== */
+
+def discoverBridge() {
+    if (enableDebug) log.debug "discoverBridge()"   
+    def myHubAction = new hubitat.device.HubAction("IASD", hubitat.device.Protocol.LAN,[type: hubitat.device.HubAction.Type.LAN_TYPE_UDPCLIENT,destinationAddress: "255.255.255.255:12107"])
+    sendHubCommand(myHubAction)
+}
+
+def devSendCmd() {
+    if (enableDebug) log.debug "devSendCmd() devcmdbody: $devcmdbody"
+    sendSimpleiZoneCmd(devcmdbody) 
+    
+    runInMillis(500, 'refresh')
+} 
+
+private parseDescriptionAsMap(description) {
+    try {
+        def descMap = description.split(",").inject([:]) { map, param ->
+            def nameAndValue = param.split(":")
+            if (nameAndValue.length == 2){
+                map += [(nameAndValue[0].trim()):nameAndValue[1].trim()]
+            } else {
+                map += [(nameAndValue[0].trim()):""]
+            }
+        }
+        return descMap
+    } catch (e) {
+        return [:]
+    }
+}
+
+private String hexToASCII(String hexValue) {
+    def output = new StringBuilder("")
+    for (int i = 0; i < hexValue.length(); i += 2) {
+        def str = hexValue.substring(i, i + 2)
+        output.append((char) Integer.parseInt(str, 16))
+    }
+    return output.toString()
+}
+
 private sendiZoneEvents() {
 /*
 thermostatOperatingState - ENUM ["heating", "pending cool", "pending heat", "vent economizer", "idle", "cooling", "fan only"]
@@ -447,19 +500,18 @@ thermostatOperatingState - ENUM ["heating", "pending cool", "pending heat", "ven
     return map
 }
 
-private getChildDeviceParse(_childname,_attrib,_value) {
-    getChildDeviceParse(_childname,[_attrib:_value])
+private childSendEvent(_childname,_attrib,_value) {
+    childSendEvent(_childname,[_attrib:_value])
 }
 
-private getChildDeviceParse(_childname,_map) {
-    if (enableDebug) log.debug "getChildDeviceParse(${_childname},${_map})"  
+private childSendEvent(_childname,_map) {
+    if (enableDebug) log.debug "childSendEvent(${_childname},${_map})"  
     
     def child = getChildDevice(_childname)
     if (child) {
         _map.each {
-            def data = [[name:it.key, value:it.value, descriptionText:"${child.displayName} ${it.key} value was set to ${it.value}"]]
-            //log.warn "$child - $data"
-            child.parse(data)
+            def data = [name:it.key, value:it.value, descriptionText:"${child.displayName} ${it.key} value was set to ${it.value}"]
+            child.sendEvent(data)
         }
     } else log.warn "no child found ?"
 }
@@ -630,7 +682,7 @@ void componentRefresh(cd) {
         def zonename = "zone${zoneIndex+1}"
         if (state.zones[zonename]) state.zones[zonename] = resultZone.ZonesV2
         def hubitatThermoAttrib = convertiZoneToHubitat(resultZone.ZonesV2)
-        getChildDeviceParse("${device.getDeviceNetworkId()}-$zonename",hubitatThermoAttrib)
+        childSendEvent("${device.getDeviceNetworkId()}-$zonename",hubitatThermoAttrib)
     }  
 }
 
@@ -659,37 +711,3 @@ void componentSetThermostatMode(cd,thermostatmode) {
     
     componentRefresh(cd)
 }
-
-/*
-void componentAuto(cd) { // set to ZoneMode = auto / climate
-}
-
-void componentOff(cd) { // set to ZoneMode = closed
-    if (enableDebug) log.debug "componentOff() ${cd.displayName}"
-}
-
-void componentCool(cd) {
-    if (enableDebug) log.debug "componentCool() ${cd.displayName}"
-}
-
-void componentHeat(cd) {
-    if (enableDebug) log.debug "componentHeat() ${cd.displayName}"
-}
-
-void componentEmergencyHeat(cd) {
-    log.warn "emergencyHeat() - not supported"
-}
-
-void componentFanAuto(cd) {
-    log.warn "fanAuto() - not supported"
-}
-
-void componentFanCirculate(cd) {
-    log.warn "fanCirculate() - not supported"
-}
-
-void componentFanOn(cd) {
-    log.warn "fanCirculate() - not supported"
-}
-*/
-
