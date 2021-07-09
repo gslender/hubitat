@@ -24,6 +24,7 @@ import groovy.json.JsonOutput
 @Field Map getFanLevel = ["low": 25 ,"medium": 50,"high": 100]      
 @Field Map getZoneModeLevel = ["open": 1 ,"close": 2,"auto": 3,"override": 4,"constant": 5]
 @Field Map getModeLevel = ["cool": 1 ,"heat": 2,"vent": 3,"dry": 4,"auto": 5,"exhuast": 6,"pump": 7]
+@Field Map getBatteryLevel = ["full": 0 ,"half": 1,"empty": 2]
 
 
 metadata {
@@ -479,6 +480,10 @@ thermostatOperatingState - ENUM ["heating", "pending cool", "pending heat", "ven
     map.put("coolingSetpoint",setPoint/100.0)
     map.put("heatingSetpoint",setPoint/100.0)
     map.put("thermostatSetpoint",setPoint/100.0)
+    
+    
+    map.put("battVolt", getBatteryLevel.find { it.value == _izone.BattVolt }?.key)
+    map.put("sensorFault", (_izone.SensorFault == 0) ? 'none' : 'fault')
 
     return map
 }
