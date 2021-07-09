@@ -17,7 +17,7 @@ import groovy.json.JsonOutput
  *
  * =======================================================================================
  *
- *  Last modified: 2021-06-26
+ *  Last modified: 2021-07-09
  *
  */ 
 
@@ -66,7 +66,7 @@ metadata {
         input name: "enableDebug", type: "bool", title: "Enable debug logging", defaultValue: true
         input name: "enableDesc", type: "bool", title: "Enable descriptionText logging", defaultValue: true
         input name: "ip", type: "string", title:"Bridge IP" , required: true
-        input name: "refresh_Rate", type: "enum", title: "Polling Refresh Rate", options:refreshEnum, defaultValue: "never"
+        input name: "refresh_Rate", type: "enum", title: "Polling Refresh Rate", options:refreshEnum, defaultValue: "5 min"
         
         input name: "devcmdbody", type: "string", title:"DEV Only Send Cmd", defaultValue:"{\"SysOn\":1}" 
     }
@@ -82,7 +82,7 @@ void installed(){
    device.updateSetting("removeChildren",[type:"bool", value: true])
    device.updateSetting("enableDebug",[type:"bool", value: true])
    device.updateSetting("enableDesc",[type:"bool", value: true])
-   device.updateSetting("refresh_Rate",[type:"enum", value: "1 min"])
+   device.updateSetting("refresh_Rate",[type:"enum", value: "5 min"])
    initialize()
 }
 
@@ -113,7 +113,7 @@ void updated() {
             unschedule()
 	}
 	if (enableDebug) log.debug "runEvery${refresh_Rate}Minute(s) refresh() "
-    
+    refresh()
     
    //if (enableDebug) runIn(1800,logsOff)
 }
@@ -121,7 +121,9 @@ void updated() {
 void initialize() {
     log.info "initialize..." 
     discoverBridge()
-    updated()
+    state.sysinfo = [:]
+    state.zones = [:]
+//    runInMillis(10000, updated())
 }
 
 void parse(description) {
@@ -297,11 +299,14 @@ def refresh() {
             def resultZone = getZonesInfo(it)
             if (resultZone.status == "ok") {    
                 def zonename = "zone${it+1}"
-                if (state.zones[zonename]) state.zones[zonename] = resultZone.ZonesV2
+                state.zones.put(zonename, resultZone.ZonesV2)
                 def hubitatThermoAttrib = convertiZoneToHubitat(resultZone.ZonesV2)
                 childSendEvent("${device.getDeviceNetworkId()}-$zonename",hubitatThermoAttrib)
             }  
         }
+        
+        // getACUnitFaults
+        getACUnitFaults()
         
         //getFirmwareList
         def resultFmw = getFirmwareList()
@@ -330,43 +335,15 @@ def List<String> configure() {
         }
     }
     
-    // connect and getSystemInfo 
-    def result = getSystemInfo()
+    // connect and refresh
+    refresh()
     
-    if (result.status == "ok") {
-        def now = new Date().format("yyyy MMM dd EEE h:mm:ss a", location.timeZone)
-        sendEvent(name: "lastCheckin", value: now)
-        state.sysinfo = result.SystemV2
-        sendiZoneEvents()
-        
-        // getZonesInfo
-        result.SystemV2.NoOfZones.times {
-            def resultZone = getZonesInfo(it)
-            if (resultZone.status == "ok") {
-                def zonename = "zone${it+1}"
-                addChildThermostat(zonename,resultZone.ZonesV2.Name)
-                state.zones.put(zonename, resultZone.ZonesV2)
-                def hubitatThermoAttrib = convertiZoneToHubitat(resultZone.ZonesV2)
-                childSendEvent("${device.getDeviceNetworkId()}-zone${it+1}",hubitatThermoAttrib)
-            }  
-        }
-        
-        // getACUnitFaults
-        getACUnitFaults()
-        
-        //getFirmwareList
-        def resultFmw = getFirmwareList()
-        if (resultFmw.status == "ok") {
-            sendEvent(name: "firmware", value: resultFmw.Fmw)
-        }    
-        
-    } else {
-        sendEvent(name: "lastCheckin", value: "unknown")
-        sendEvent(name: "help", value: "check IP is correct")
+    state.zones.eachWithIndex { zoneNo, zoneData, index ->
+        addChildThermostat(zoneNo,zoneData.Name)
     }
-    sendEvent(name: "status", value: result.status)
     
-    return
+    // populate the children
+    refresh()
 }
 
 /* ======== custom commands and methods ======== */
@@ -422,7 +399,7 @@ thermostatOperatingState - ENUM ["heating", "pending cool", "pending heat", "ven
     sendEvent(name: "supportedThermostatFanModes", value: getFanLevel.collect {k,v -> k})
     sendEvent(name: "supportedThermostatModes", value: getModeLevel.collect {k,v -> k})
     
-    def ctrlZone = state.zones["zone${state.sysinfo.CtrlZone+1}"]
+    def ctrlZone = state.zones.get("zone${state.sysinfo.CtrlZone+1}")
     if (ctrlZone != null) sendEvent(name: "ctrlZone", value: ctrlZone.Name)
     
     if (state.sysinfo.SysOn == 0) {
@@ -435,6 +412,9 @@ thermostatOperatingState - ENUM ["heating", "pending cool", "pending heat", "ven
         sendEvent(name: "speed", value: getFanMode())
         sendEvent(name: "thermostatFanMode", value: getFanMode())
     }
+    
+    sendEvent(name: "warnings", value: state.sysinfo.Warnings)
+    sendEvent(name: "acError", value: state.sysinfo.ACError)
 }
 
 private String getFanMode() {
@@ -463,6 +443,9 @@ thermostatOperatingState - ENUM ["heating", "pending cool", "pending heat", "ven
     def map = [:]
     map.put("temperature",_izone.Temp/100.0)
     def setPoint = _izone.Setpoint 
+    
+    def now = new Date().format("yyyy MMM dd EEE h:mm:ss a", location.timeZone)
+    map.put("lastCheckin", now)
     
     map.put("supportedThermostatModes", ["open", "close", "auto"])
     map.put("supportedThermostatFanModes", ["open", "close", "auto"])
