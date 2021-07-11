@@ -35,14 +35,18 @@ metadata {
         capability "Switch"
         capability "FanControl"
         capability "Thermostat"
+        capability "Battery"
           
         attribute "firmware", "STRING"
         attribute "switch", "STRING"
         attribute "speed", "STRING"
-        attribute "temperature", "NUMBER"
+        attribute "battery", "NUMBER"
+        attribute "temperature", "NUMBER"        
         attribute "thermostatSetpoint", "NUMBER"
         attribute "thermostatMode", "STRING"
         attribute "ctrlZone", "STRING"
+        attribute "warnings", "STRING"
+        attribute "acError", "STRING"
         attribute "supportedFanSpeeds", "JSON_OBJECT"
         attribute "supportedThermostatFanModes", "JSON_OBJECT"
         attribute "supportedThermostatModes", "JSON_OBJECT"
@@ -391,10 +395,10 @@ private sendiZoneEvents() {
 /*
 thermostatOperatingState - ENUM ["heating", "pending cool", "pending heat", "vent economizer", "idle", "cooling", "fan only"]
 */    
-    sendEvent(name: "temperature", value: state.sysinfo.Temp/100.0)
-    sendEvent(name: "thermostatSetpoint", value: state.sysinfo.Setpoint/100.0)
-    sendEvent(name: "coolingSetpoint", value: state.sysinfo.Setpoint/100.0)
-    sendEvent(name: "heatingSetpoint", value: state.sysinfo.Setpoint/100.0)
+    sendEvent(name: "temperature", value: Math.round(state.sysinfo.Temp/10)/10.0)
+    sendEvent(name: "thermostatSetpoint", value: Math.round(state.sysinfo.Setpoint/10)/10.0)
+    sendEvent(name: "coolingSetpoint", value: Math.round(state.sysinfo.Setpoint/10)/10.0)
+    sendEvent(name: "heatingSetpoint", value: Math.round(state.sysinfo.Setpoint/10)/10.0)
     sendEvent(name: "thermostatMode", value: getModeLevel.find { it.value == state.sysinfo.SysMode }?.key)
     sendEvent(name: "supportedFanSpeeds", value: getFanLevel.collect {k,v -> k})
     sendEvent(name: "supportedThermostatFanModes", value: getFanLevel.collect {k,v -> k})
@@ -442,7 +446,7 @@ private Map convertiZoneToHubitat(_izone) {
 thermostatOperatingState - ENUM ["heating", "pending cool", "pending heat", "vent economizer", "idle", "cooling", "fan only"]
 */
     def map = [:]
-    map.put("temperature",_izone.Temp/100.0)
+    map.put("temperature",Math.round(_izone.Temp/10)/10.0 )
     def setPoint = _izone.Setpoint 
     
     def now = new Date().format("yyyy MMM dd EEE h:mm:ss a", location.timeZone)
@@ -477,9 +481,9 @@ thermostatOperatingState - ENUM ["heating", "pending cool", "pending heat", "ven
             break
     }
 
-    map.put("coolingSetpoint",setPoint/100.0)
-    map.put("heatingSetpoint",setPoint/100.0)
-    map.put("thermostatSetpoint",setPoint/100.0)
+    map.put("coolingSetpoint",Math.round(setPoint/10)/10.0)
+    map.put("heatingSetpoint",Math.round(setPoint/10)/10.0)
+    map.put("thermostatSetpoint",Math.round(setPoint/10)/10.0)
     
     
     map.put("battVolt", getBatteryLevel.find { it.value == _izone.BattVolt }?.key)
@@ -523,8 +527,7 @@ private Map sendSimpleiZoneCmd(cmdbody) {
         
         httpPost(params) {
             resp -> resp.headers.each {
-                //if (enableDebug && enableRespDebug) 
-                log.debug "resp.headers: ${it.name} : ${it.value}"
+                if (enableDebug && enableRespDebug) log.debug "resp.headers: ${it.name} : ${it.value}"
             }
             
             if (resp.status == 200 && resp.data == "{OK}") 
