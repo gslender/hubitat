@@ -260,13 +260,9 @@ def setHeatingSetpoint(temperature) {
 }
 
 private setSetpoint(temperature) {
-    if (state.sysinfo.RAS != 3) {         
-        sendSimpleiZoneCmd("SysSetpoint",temperature*100) 
-    
-        runInMillis(500, 'refresh')
-    } else {
-        log.warn "setSetpoint($temperature) - not available when RAS=Zones"
-    }    
+    if (enableDebug) log.debug "setSetpoint() temperature: $temperature"
+    sendSimpleiZoneCmd("SysSetpoint",temperature*100) 
+    runInMillis(500, 'refresh')
 }
 
 def setSchedule(json) {
@@ -514,33 +510,35 @@ private Map sendSimpleiZoneCmd(cmd,value) {
 }
 
 private Map sendSimpleiZoneCmd(cmdbody) {
-    def respData = [:]
+    def respData
     def params = [:]
-    
     params.uri = "http://${ip}:80/iZoneCommandV2"
     params.body = cmdbody
-    params.textParser = true
        
     if (enableDebug) log.debug "sendSimpleiZoneCmd() params: $params"
     
     try {
         
-        httpPost(params) {
-            resp -> resp.headers.each {
-                if (enableDebug && enableRespDebug) log.debug "resp.headers: ${it.name} : ${it.value}"
+        httpPost(params) { resp -> 
+            
+            resp.headers.each {
+                if (enableDebug && enableRespDebug) log.warn "resp.headers: ${it.name} : ${it.value}"
             }
             
-            if (resp.status == 200 && resp.data == "{OK}") 
-                respData.status = "ok"
-            else {
-                respData.status = "failed: ${resp.status} data: ${resp.data}"
-            }  
+            respData = resp.data.text
         } 
     } catch (e) {
         if (enableDebug) log.debug "sendSimpleiZoneCmd() ERROR: $e"
-        respData.status = "failed: $e"
+        return [status:"failed: $e"]
     }
-    return respData
+                
+    if (enableDebug && enableRespDebug) log.warn "resp.data.text: ${respData}"
+    
+    if (!respData.startsWith("{OK}")) {
+        log.warn "$cmdbody returned $respData"
+    }
+    
+    return [status:"$respData"]
 }
 
 private Map getSystemInfo() {
@@ -554,11 +552,11 @@ private Map getSystemInfo() {
         respData.status = "failed"
         httpPostJson(uri,mapBody) {
             resp -> resp.headers.each {
-                if (enableDebug && enableRespDebug) log.debug "resp.headers: ${it.name} : ${it.value}"
+                if (enableDebug && enableRespDebug) log.warn "resp.headers: ${it.name} : ${it.value}"
             }
             
             respData = resp.getData() as Map
-            if (enableDebug && enableRespDebug) log.debug "resp.data: ${respData.toString()}"
+            if (enableDebug && enableRespDebug) log.warn "resp.data: ${respData.toString()}"
             if (respData.containsKey("SystemV2")) respData.status = "ok"
         } 
     } catch (e) {
@@ -579,11 +577,11 @@ private Map getZonesInfo(int zone) {
         respData.status = "failed"
         httpPostJson(uri,mapBody) {
             resp -> resp.headers.each {
-                if (enableDebug && enableRespDebug) log.debug "resp.headers: ${it.name} : ${it.value}"
+                if (enableDebug && enableRespDebug) log.warn "resp.headers: ${it.name} : ${it.value}"
             }
             
             respData = resp.getData() as Map
-            if (enableDebug && enableRespDebug) log.debug "resp.data: ${respData.toString()}"
+            if (enableDebug && enableRespDebug) log.warn "resp.data: ${respData.toString()}"
             if (respData.containsKey("ZonesV2")) respData.status = "ok"
         } 
     } catch (e) {
@@ -604,11 +602,11 @@ private Map getACUnitFaults() {
         respData.status = "failed"
         httpPostJson(uri,mapBody) {
             resp -> resp.headers.each {
-                if (enableDebug && enableRespDebug) log.debug "resp.headers: ${it.name} : ${it.value}"
+                if (enableDebug && enableRespDebug) log.warn "resp.headers: ${it.name} : ${it.value}"
             }
             
             respData = resp.getData() as Map
-            if (enableDebug && enableRespDebug) log.debug "resp.data: ${respData.toString()}"
+            if (enableDebug && enableRespDebug) log.warn "resp.data: ${respData.toString()}"
             if (respData.containsKey("AcUnitFaultHistV2")) respData.status = "ok"
         } 
     } catch (e) {
@@ -629,11 +627,11 @@ private Map getFirmwareList() {
         respData.status = "failed"
         httpPostJson(uri,mapBody) {
             resp -> resp.headers.each {
-                if (enableDebug && enableRespDebug) log.debug "resp.headers: ${it.name} : ${it.value}"
+                if (enableDebug && enableRespDebug) log.warn "resp.headers: ${it.name} : ${it.value}"
             }
             
             respData = resp.getData() as Map
-            if (enableDebug && enableRespDebug) log.debug "resp.data: ${respData.toString()}"
+            if (enableDebug && enableRespDebug) log.warn "resp.data: ${respData.toString()}"
             if (respData.containsKey("Fmw")) respData.status = "ok"
         } 
     } catch (e) {
