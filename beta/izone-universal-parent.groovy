@@ -17,7 +17,7 @@ import groovy.json.JsonOutput
  *
  * =======================================================================================
  *
- *  Last modified: 2021-07-09
+ *  Last modified: 2021-07-13
  *
  */ 
 
@@ -57,7 +57,7 @@ metadata {
         
         command "setThermostatMode", [[name: "AC mode*",type:"ENUM", description:"Cooling/heating mode to set", constraints: getModeLevel.collect {k,v -> k}]]
         
-        command "devSendCmd"
+ //       command "devSendCmd"
     }
     
     preferences {
@@ -67,13 +67,14 @@ metadata {
 		    refreshEnum << ["15 min" : "Refresh every 15 minutes"]
 		    refreshEnum << ["30 min" : "Refresh every 30 minutes"]
 		    refreshEnum << ["never" : "Never Refresh"]
-        input name: "removeChildren", type: "bool", title: "Remove children on Configure", defaultValue: true
+        input name: "removeChildren", type: "bool", title: "Remove Children on Configure", defaultValue: true
+        input name: "childFanUpdatesMainFan", type: "bool", title: "Child Fan Updates Main Fan", defaultValue: false
         input name: "enableDebug", type: "bool", title: "Enable debug logging", defaultValue: true
         input name: "enableDesc", type: "bool", title: "Enable descriptionText logging", defaultValue: true
         input name: "ip", type: "string", title:"Bridge IP" , required: true
         input name: "refresh_Rate", type: "enum", title: "Polling Refresh Rate", options:refreshEnum, defaultValue: "5 min"
         
-        input name: "devcmdbody", type: "string", title:"DEV Only Send Cmd", defaultValue:"{\"SysOn\":1}" 
+//        input name: "devcmdbody", type: "string", title:"DEV Only Send Cmd", defaultValue:"{\"SysOn\":1}" 
     }
 }
 
@@ -85,6 +86,7 @@ metadata {
 void installed(){
    log.info "installed..."
    device.updateSetting("removeChildren",[type:"bool", value: true])
+   device.updateSetting("childFanUpdatesMainFan",[type:"bool", value: false])
    device.updateSetting("enableDebug",[type:"bool", value: true])
    device.updateSetting("enableDesc",[type:"bool", value: true])
    device.updateSetting("refresh_Rate",[type:"enum", value: "5 min"])
@@ -448,8 +450,8 @@ thermostatOperatingState - ENUM ["heating", "pending cool", "pending heat", "ven
     def now = new Date().format("yyyy MMM dd EEE h:mm:ss a", location.timeZone)
     map.put("lastCheckin", now)
     
-    map.put("supportedThermostatModes", ["open", "close", "auto"])
-    map.put("supportedThermostatFanModes", ["open", "close", "auto"])
+    map.put("supportedThermostatModes", ["open", "close", "climate"])
+    map.put("supportedThermostatFanModes",getFanLevel.collect {k,v -> k})
     map.put("thermostatFanMode",getFanMode())
     
     switch (_izone.Mode) {
@@ -676,19 +678,33 @@ void componentRefresh(cd) {
 }
 
 void componentSetCoolingSetpoint(cd,temperature) {
-    if (enableDebug) log.debug "componentSetCoolingSetpoint() ${cd.displayName}"
+    if (enableDebug) log.debug "componentSetCoolingSetpoint() ${cd.displayName},$temperature"
+    
+    def zoneIndex = (cd.getDeviceNetworkId().drop(cd.getDeviceNetworkId().size() - 1).toInteger())-1    
+    sendSimpleiZoneCmd("ZoneSetpoint",["Index":zoneIndex,"Setpoint":temperature*100])
+    
+    componentRefresh(cd)
 }
 
 void componentSetHeatingSetpoint(cd,temperature) {
-    if (enableDebug) log.debug "componentSetCoolingSetpoint() ${cd.displayName}"
+    if (enableDebug) log.debug "componentSetHeatingSetpoint() ${cd.displayName},$temperature"
+    
+    def zoneIndex = (cd.getDeviceNetworkId().drop(cd.getDeviceNetworkId().size() - 1).toInteger())-1    
+    sendSimpleiZoneCmd("ZoneSetpoint",["Index":zoneIndex,"Setpoint":temperature*100])
 }
 
 void componentSetSchedule(cd) {
     log.warn "setSchedule() - not supported"
 }
 
-void componentSetThermostatFanMode(cd,mode) {
-    if (enableDebug) log.debug "componentSetThermostatFanMode() ${cd.displayName}"
+void componentSetThermostatFanMode(cd,fanmode) {
+    if (enableDebug) log.debug "componentSetThermostatFanMode() ${cd.displayName},$fanmode"
+    
+    if (childFanUpdatesMainFan) {
+        setSpeed(fanmode)
+    } else {
+        if (enableDebug) log.debug "componentSetThermostatFanMode() !ignored!"
+    }
 }
 
 void componentSetThermostatMode(cd,thermostatmode) {
@@ -696,7 +712,10 @@ void componentSetThermostatMode(cd,thermostatmode) {
     
     def zoneIndex = (cd.getDeviceNetworkId().drop(cd.getDeviceNetworkId().size() - 1).toInteger())-1
     def zoneMode = getZoneModeLevel[thermostatmode]    
-    sendSimpleiZoneCmd("ZoneMode",["Index":zoneIndex,"Mode":zoneMode])
-    
-    componentRefresh(cd)
+    if (zoneMode) {
+        sendSimpleiZoneCmd("ZoneMode",["Index":zoneIndex,"Mode":zoneMode])
+        componentRefresh(cd)
+    } else {
+        if (enableDebug) log.debug "componentSetThermostatMode() !ignored!"
+    }
 }
