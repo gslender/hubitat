@@ -1,3 +1,4 @@
+import groovy.transform.Field
 /**
  * =======================================================================================
  *  Ikuu Zigbee Light Fan Controller
@@ -14,9 +15,11 @@
  *
  * =======================================================================================
  *
- *  Last modified: 2021-06-18
+ *  Last modified: 2021-07-14
  *
  */ 
+
+@Field static final List supportedFanSpeeds = ["low", "medium", "high", "off"]
  
 metadata {
       definition (name: "Ikuu Zigbee Light Fan Controller", namespace: "gslender", author: "Grant Slender", importUrl: "https://raw.githubusercontent.com/gslender/hubitat/main/ikuu-zigbee-light-fan-controller.groovy") {
@@ -48,29 +51,29 @@ preferences {
 /* https://docs.hubitat.com/index.php?title=Device_Code */
 
 void installed(){
-   log.info "installed..."
-   device.updateSetting("enableDebug",[type:"bool", value: true])
-   device.updateSetting("enableDesc",[type:"bool", value: true])
-   initialize()
+    log.info "installed..."
+    device.updateSetting("enableDebug",[type:"bool", value: true])
+    device.updateSetting("enableDesc",[type:"bool", value: true])
+    initialize()
 }
 
 void uninstalled(){
-   log.info "uninstalled..."
+    log.info "uninstalled..."
 }
 
-void updated() {
-   log.info "updated..."
-   log.warn "debug logging is: ${enableDebug == true}"
-   log.warn "description logging is: ${enableDesc == true}"
+void updated() { 
+    log.info "updated..."
+    log.warn "debug logging is: ${enableDebug == true}"
+    log.warn "description logging is: ${enableDesc == true}"
 }
 
-void initialize() {
-   log.info "initialize..."    
-   device.setName("IKUU-FAN-LIGHT")
-   updated();
-   configure()
-   unschedule()
-   if (enableDebug) runIn(1800,logsOff)
+void initialize() {   
+    log.info "initialize..."    
+    device.setName("IKUU-FAN-LIGHT")
+    updated();
+    configure()
+    unschedule()
+    if (enableDebug) runIn(1800,logsOff)
 }
 
 void parse(String description) {
@@ -127,9 +130,9 @@ void parse(String description) {
 /* ======== capability commands ======== */
 
 def refresh() {
-   if (enableDebug) log.debug "refresh()"
+    if (enableDebug) log.debug "refresh()"
    
-   return zigbee.onOffRefresh() + zigbee.readAttribute(0x0202, 0x0000)
+    return zigbee.onOffRefresh() + zigbee.readAttribute(0x0202, 0x0000)
 }
 
 
@@ -138,6 +141,7 @@ def List<String> configure() {
     
     // clean stuff up !!
     state.clear()
+    
     getChildDevices().each { 
         if (enableDebug) log.debug "deleteChildDevice ${it.deviceNetworkId}"
         deleteChildDevice("${it.deviceNetworkId}") 
@@ -145,8 +149,9 @@ def List<String> configure() {
     
     addChildType("Light","Switch")
     addChildType("Fan","Fan")
-    state.comments = "Child devices created!"
-    return
+    state.comments = "Child devices created!" 
+    return zigbee.configureReporting(0x0006, 0x0000, 0x10, 1, 600, null) +
+	zigbee.configureReporting(0x0202, 0x0000, 0x30, 1, 600, null)
 }
 
 /* ======== custom commands and methods ======== */
@@ -172,6 +177,15 @@ def calcChildFanSpeed() {
     }
     getChildDeviceParse("${device.deviceNetworkId}-Fan","speed",fanspeed) 
     getChildDeviceParse("${device.deviceNetworkId}-Fan","switch",fanswitch) 
+    getChildDeviceParse("${device.deviceNetworkId}-Fan","supportedFanSpeeds",["low", "medium", "high", "off"])
+}
+
+def getChildDeviceParse(_childname,_attrib,_value) {
+    if (enableDebug) log.debug "getChildDeviceParse(${_childname},${_attrib},${_value})"  
+    def child = getChildDevice(_childname)
+    if (child) {
+        child.sendEvent(name:_attrib, value:_value)
+    } else log.warn "no child found ?"
 }
 
 def addChildType(String label, String type) {
@@ -197,14 +211,6 @@ def addChildType(String label, String type) {
 def logsOff(){
     log.warn "debug logging disabled..."
     device.updateSetting("enableDebug",[value:"false",type:"bool"])
-}
-
-def getChildDeviceParse(_childname,_attrib,_value) {
-    if (enableDebug) log.debug "getChildDeviceParse(${_childname},${_attrib},${_value})"  
-    def child = getChildDevice(_childname)
-    if (child) {
-        child.parse([[name:_attrib, value:_value, descriptionText:"${child.displayName} ${_attrib} was turned ${_value}"]])
-    } else log.warn "no child found ?"
 }
 
 def lightOn() {
