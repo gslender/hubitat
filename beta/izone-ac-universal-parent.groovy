@@ -25,10 +25,12 @@ import groovy.json.JsonOutput
 @Field Map getZoneModeLevel = ["open": 1 ,"close": 2,"auto": 3,"override": 4,"constant": 5]
 @Field Map getModeLevel = ["cool": 1 ,"heat": 2,"vent": 3,"dry": 4,"auto": 5,"exhuast": 6,"pump": 7]
 @Field Map getBatteryLevel = ["full": 0 ,"half": 1,"empty": 2]
+@Field Map getBatteryPcnt = [100: 0 ,50: 1,0: 2]
+
 
 
 metadata {
-    definition (name: "iZone Universal Parent", namespace: "gslender", author: "Grant Slender", importUrl: "https://raw.githubusercontent.com/gslender/hubitat/main/izone-universal-parent.groovy") {
+    definition (name: "iZone AC Universal Parent", namespace: "gslender", author: "Grant Slender", importUrl: "https://raw.githubusercontent.com/gslender/hubitat/main/izone-ac-universal-parent.groovy") {
 
         capability "Refresh"
         capability "Configuration"
@@ -298,6 +300,8 @@ def refresh() {
         sendiZoneEvents()
         
         // getZonesInfo
+        state.zones.clear()
+        def worstBattVolt = 0
         result.SystemV2.NoOfZones.times {
             def resultZone = getZonesInfo(it)
             if (resultZone.status == "ok") {    
@@ -305,8 +309,12 @@ def refresh() {
                 state.zones.put(zonename, resultZone.ZonesV2)
                 def hubitatThermoAttrib = convertiZoneToHubitat(resultZone.ZonesV2)
                 childSendEvent("${device.getDeviceNetworkId()}-$zonename",hubitatThermoAttrib)
+                if (resultZone.ZonesV2.BattVolt.toInteger() > worstBattVolt) worstBattVolt = resultZone.ZonesV2.BattVolt.toInteger()
             }  
         }
+        
+        //send battery
+        sendEvent(name: "battery", value: getBatteryPcnt.find { it.value == worstBattVolt }?.key)
         
         // getACUnitFaults
         getACUnitFaults()
@@ -396,8 +404,7 @@ thermostatOperatingState - ENUM ["heating", "pending cool", "pending heat", "ven
     sendEvent(name: "temperature", value: Math.round(state.sysinfo.Temp/10)/10.0)
     sendEvent(name: "thermostatSetpoint", value: Math.round(state.sysinfo.Setpoint/10)/10.0)
     sendEvent(name: "coolingSetpoint", value: Math.round(state.sysinfo.Setpoint/10)/10.0)
-    sendEvent(name: "heatingSetpoint", value: Math.round(state.sysinfo.Setpoint/10)/10.0)
-    sendEvent(name: "thermostatMode", value: getModeLevel.find { it.value == state.sysinfo.SysMode }?.key)
+    sendEvent(name: "heatingSetpoint", value: Math.round(state.sysinfo.Setpoint/10)/10.0)   
     sendEvent(name: "supportedFanSpeeds", value: getFanLevel.collect {k,v -> k})
     sendEvent(name: "supportedThermostatFanModes", value: getFanLevel.collect {k,v -> k})
     sendEvent(name: "supportedThermostatModes", value: getModeLevel.collect {k,v -> k})
@@ -409,11 +416,14 @@ thermostatOperatingState - ENUM ["heating", "pending cool", "pending heat", "ven
         sendEvent(name: "switch", value: "off")
         sendEvent(name: "speed", value: "off")
         sendEvent(name: "thermostatFanMode", value: "off")        
-        sendEvent(name: "thermostatMode", value: "off")
+        sendEvent(name: "thermostatMode", value: "off")     
+        sendEvent(name: "thermostatOperatingState", value: "off")     
     } else {
         sendEvent(name: "switch", value: "on")
         sendEvent(name: "speed", value: getFanMode())
         sendEvent(name: "thermostatFanMode", value: getFanMode())
+        sendEvent(name: "thermostatMode", value: getModeLevel.find { it.value == state.sysinfo.SysMode }?.key)
+        sendEvent(name: "thermostatOperatingState", value: getModeLevel.find { it.value == state.sysinfo.SysMode }?.key) 
     }
     
     sendEvent(name: "warnings", value: state.sysinfo.Warnings)
@@ -450,26 +460,27 @@ thermostatOperatingState - ENUM ["heating", "pending cool", "pending heat", "ven
     def now = new Date().format("yyyy MMM dd EEE h:mm:ss a", location.timeZone)
     map.put("lastCheckin", now)
     
-    map.put("supportedThermostatModes", ["open", "close", "climate"])
+    map.put("supportedThermostatModes",getZoneModeLevel.collect {k,v -> k})
     map.put("supportedThermostatFanModes",getFanLevel.collect {k,v -> k})
     map.put("thermostatFanMode",getFanMode())
     
+    def mode = "off"
     switch (_izone.Mode) {
         case 1: // ZoneMode_Open
-            map.put("thermostatMode","open")
+            mode = "open"
             setPoint = state.sysinfo.Setpoint
             break
         case 2: // ZoneMode_Close
-            map.put("thermostatMode","close")
+            mode = "close"
             setPoint = state.sysinfo.Setpoint
             break
         case 3: // ZoneMode_Auto
-            map.put("thermostatMode","auto")
+            mode = "auto"
         /*
             if (_izone.Setpoint > _izone.Temp) {
-                map.put("thermostatMode","heat")
+                mode = "heat"
             } else {
-                map.put("thermostatMode","cool")
+                mode = "cool"
             }
         */
             break
@@ -478,6 +489,9 @@ thermostatOperatingState - ENUM ["heating", "pending cool", "pending heat", "ven
         default:
             break
     }
+    
+    map.put("thermostatMode",mode)
+    map.put("thermostatOperatingState",mode)
 
     map.put("coolingSetpoint",Math.round(setPoint/10)/10.0)
     map.put("heatingSetpoint",Math.round(setPoint/10)/10.0)
