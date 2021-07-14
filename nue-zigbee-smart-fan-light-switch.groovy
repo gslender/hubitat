@@ -1,3 +1,4 @@
+import groovy.transform.Field
 /**
  * =======================================================================================
  *  Ikuu Zigbee Light Fan Controller
@@ -14,9 +15,11 @@
  *
  * =======================================================================================
  *
- *  Last modified: 2021-06-18
+ *  Last modified: 2021-07-14
  *
  */ 
+
+@Field static final List supportedFanSpeeds = ["low", "medium", "high", "off"]
  
 metadata {
       definition (name: "Ikuu Zigbee Light Fan Controller", namespace: "gslender", author: "Grant Slender", importUrl: "https://raw.githubusercontent.com/gslender/hubitat/main/ikuu-zigbee-light-fan-controller.groovy") {
@@ -174,6 +177,7 @@ def calcChildFanSpeed() {
     }
     getChildDeviceParse("${device.deviceNetworkId}-Fan","speed",fanspeed) 
     getChildDeviceParse("${device.deviceNetworkId}-Fan","switch",fanswitch) 
+    getChildDeviceParse("${device.deviceNetworkId}-Fan","supportedFanSpeeds",["low", "medium", "high", "off"])
 }
 
 def addChildType(String label, String type) {
@@ -205,7 +209,7 @@ def getChildDeviceParse(_childname,_attrib,_value) {
     if (enableDebug) log.debug "getChildDeviceParse(${_childname},${_attrib},${_value})"  
     def child = getChildDevice(_childname)
     if (child) {
-        child.parse([[name:_attrib, value:_value, descriptionText:"${child.displayName} ${_attrib} was turned ${_value}"]])
+        child.sendEvent(name:_attrib, value:_value)
     } else log.warn "no child found ?"
 }
 
