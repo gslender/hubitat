@@ -17,7 +17,7 @@ import groovy.json.JsonOutput
  *
  * =======================================================================================
  *
- *  Last modified: 2021-07-13
+ *  Last modified: 2021-07-19
  *
  */
 
@@ -124,7 +124,7 @@ void updated() {
 	if (enableDebug) log.debug "runEvery${refresh_Rate}Minute(s) refresh() "
     refresh()
 
-   //if (enableDebug) runIn(1800,logsOff)
+   if (enableDebug) runIn(1800,logsOff)
 }
 
 void initialize() {
@@ -133,7 +133,6 @@ void initialize() {
     state.sysinfo = [:]
     state.zones = [:]
     state.firmware = null
-//    runInMillis(10000, updated())
 }
 
 void parse(description) {
@@ -266,7 +265,7 @@ def setHeatingSetpoint(temperature) {
 
 private setSetpoint(temperature) {
     if (enableDebug) log.debug "setSetpoint() temperature: $temperature"
-    sendSimpleiZoneCmd("SysSetpoint",temperature*100)
+    sendSimpleiZoneCmd("SysSetpoint",(temperature*100).toInteger())
     runInMillis(500, 'refresh')
 }
 
@@ -399,14 +398,19 @@ private String hexToASCII(String hexValue) {
     return output.toString()
 }
 
+private tmpRnd(BigDecimal temp) {
+    return temp.divide(100,1, BigDecimal.ROUND_HALF_UP)
+
+}
+
 private sendiZoneEvents() {
 /*
 thermostatOperatingState - ENUM ["heating", "pending cool", "pending heat", "vent economizer", "idle", "cooling", "fan only"]
 */
-    sendEvent(name: "temperature", value: Math.round(state.sysinfo.Temp/10)/10.0)
-    sendEvent(name: "thermostatSetpoint", value: Math.round(state.sysinfo.Setpoint/10)/10.0)
-    sendEvent(name: "coolingSetpoint", value: Math.round(state.sysinfo.Setpoint/10)/10.0)
-    sendEvent(name: "heatingSetpoint", value: Math.round(state.sysinfo.Setpoint/10)/10.0)
+    sendEvent(name: "temperature", value: tmpRnd(state.sysinfo.Temp))
+    sendEvent(name: "thermostatSetpoint", value: tmpRnd(state.sysinfo.Setpoint))
+    sendEvent(name: "coolingSetpoint", value: tmpRnd(state.sysinfo.Setpoint))
+    sendEvent(name: "heatingSetpoint", value: tmpRnd(state.sysinfo.Setpoint))
     sendEvent(name: "supportedFanSpeeds", value: getFanLevel.collect {k,v -> k})
     sendEvent(name: "supportedThermostatFanModes", value: getFanLevel.collect {k,v -> k})
     sendEvent(name: "supportedThermostatModes", value: getModeLevel.collect {k,v -> k})
@@ -456,7 +460,7 @@ private Map convertiZoneToHubitat(_izone) {
 thermostatOperatingState - ENUM ["heating", "pending cool", "pending heat", "vent economizer", "idle", "cooling", "fan only"]
 */
     def map = [:]
-    map.put("temperature",Math.round(_izone.Temp/10)/10.0 )
+    map.put("temperature",tmpRnd(_izone.Temp))
     def setPoint = _izone.Setpoint
 
     def now = new Date().format("yyyy MMM dd EEE h:mm:ss a", location.timeZone)
@@ -495,10 +499,9 @@ thermostatOperatingState - ENUM ["heating", "pending cool", "pending heat", "ven
     map.put("thermostatMode",mode)
     map.put("thermostatOperatingState",mode)
 
-    map.put("coolingSetpoint",Math.round(setPoint/10)/10.0)
-    map.put("heatingSetpoint",Math.round(setPoint/10)/10.0)
-    map.put("thermostatSetpoint",Math.round(setPoint/10)/10.0)
-
+    map.put("coolingSetpoint",tmpRnd(setPoint))
+    map.put("heatingSetpoint",tmpRnd(setPoint))
+    map.put("thermostatSetpoint",tmpRnd(setPoint))
 
     map.put("battVolt", getBatteryLevel.find { it.value == _izone.BattVolt }?.key)
     map.put("sensorFault", (_izone.SensorFault == 0) ? 'none' : 'fault')
@@ -697,7 +700,7 @@ void componentSetCoolingSetpoint(cd,temperature) {
     if (enableDebug) log.debug "componentSetCoolingSetpoint() ${cd.displayName},$temperature"
 
     def zoneIndex = (cd.getDeviceNetworkId().drop(cd.getDeviceNetworkId().size() - 1).toInteger())-1
-    sendSimpleiZoneCmd("ZoneSetpoint",["Index":zoneIndex,"Setpoint":temperature*100])
+    sendSimpleiZoneCmd("ZoneSetpoint",["Index":zoneIndex,"Setpoint":(temperature*100).toInteger()])
 
     componentRefresh(cd)
 }
@@ -706,7 +709,7 @@ void componentSetHeatingSetpoint(cd,temperature) {
     if (enableDebug) log.debug "componentSetHeatingSetpoint() ${cd.displayName},$temperature"
 
     def zoneIndex = (cd.getDeviceNetworkId().drop(cd.getDeviceNetworkId().size() - 1).toInteger())-1
-    sendSimpleiZoneCmd("ZoneSetpoint",["Index":zoneIndex,"Setpoint":temperature*100])
+    sendSimpleiZoneCmd("ZoneSetpoint",["Index":zoneIndex,"Setpoint":(temperature*100).toInteger()])
 }
 
 void componentSetSchedule(cd) {
