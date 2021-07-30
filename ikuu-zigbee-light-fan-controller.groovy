@@ -15,7 +15,7 @@ import groovy.transform.Field
  *
  * =======================================================================================
  *
- *  Last modified: 2021-07-14
+ *  Last modified: 2021-06-18
  *
  */ 
 
@@ -26,6 +26,7 @@ metadata {
 
       capability "Refresh"
       capability "Configuration"
+      capability "Initialize"
        
       command "lightOn"
       command "lightOff"
@@ -52,6 +53,7 @@ preferences {
 
 void installed(){
     log.info "installed..."
+    device.setName("IKUU-FAN-LIGHT")
     device.updateSetting("enableDebug",[type:"bool", value: true])
     device.updateSetting("enableDesc",[type:"bool", value: true])
     initialize()
@@ -65,15 +67,13 @@ void updated() {
     log.info "updated..."
     log.warn "debug logging is: ${enableDebug == true}"
     log.warn "description logging is: ${enableDesc == true}"
+    unschedule()
+    if (enableDebug) runIn(1800,logsOff)
 }
 
 void initialize() {   
     log.info "initialize..."    
-    device.setName("IKUU-FAN-LIGHT")
-    updated();
-    configure()
-    unschedule()
-    if (enableDebug) runIn(1800,logsOff)
+    updated()
 }
 
 void parse(String description) {
