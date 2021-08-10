@@ -15,7 +15,7 @@ import groovy.transform.Field
  *
  * =======================================================================================
  *
- *  Last modified: 2021-06-18
+ *  Last modified: 2021-08-10
  *
  */ 
 
@@ -150,8 +150,9 @@ def List<String> configure() {
     addChildType("Light","Switch")
     addChildType("Fan","Fan")
     state.comments = "Child devices created!" 
-    return zigbee.configureReporting(0x0006, 0x0000, 0x10, 1, 600, null) +
-	zigbee.configureReporting(0x0202, 0x0000, 0x30, 1, 600, null)
+    return zigbee.writeAttribute(0x0202, 0x0001, 0x30, 0) +    //0x0202, 0x0001 FanModeSequence to L/M/H
+        zigbee.configureReporting(0x0006, 0x0000, 0x10, 1, 600, null) +
+	    zigbee.configureReporting(0x0202, 0x0000, 0x30, 1, 600, null)
 }
 
 /* ======== custom commands and methods ======== */
