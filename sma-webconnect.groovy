@@ -26,10 +26,12 @@ import groovy.json.JsonOutput
 @Field String sma_urlLogout                   = "dyn/logout.json"
 @Field String sma_urlValues                   = "dyn/getValues.json"
 
-@Field String sma_status                      = "6180_08214800" 
-@Field String sma_metering_power_supplied     = "6100_40463600" // inverter pushes this in grid in W
+@Field String sma_status                      = "6180_08214800"                                        
+@Field String sma_metering_power_supplied     = "6100_40463600" // inverter grid feed-in in W | Metering_GridMs_TotWOut 
 @Field String sma_pv_power                    = "6100_0046C200" // pv generates this in W
-@Field String sma_metering_power_absorbed     = "6100_40463700" // grid sends me this in W
+@Field String sma_grid_power                  = "6100_40263F00" // inverter suppiles this in W | GridMs_TotW_Cur
+@Field String sma_metering_power_absorbed     = "6100_40463700" // grid sends me this in W | Metering_GridMs_TotWIn
+                                                 
 
 metadata {
     definition (name: "SMA Webconnect", namespace: "gslender", author: "Grant Slender", importUrl: "https://raw.githubusercontent.com/gslender/hubitat/main/sma-webconnect.groovy") {
@@ -39,12 +41,10 @@ metadata {
     	capability "Energy Meter"
 		capability "Power Meter"
         capability "Sensor"
-        
-        command "startPolling"
-        command "stopPolling"
+        capability "Initialize"
           
-        attribute "firmware", "STRING"
-        attribute "authenticated", "STRING" // SID
+        attribute "status", "STRING"
+        attribute "lastCheckin", "STRING" 
     }
     
     preferences {
@@ -60,14 +60,15 @@ metadata {
 		        refreshEnum << [1 : "Refresh every 1 second"]
 		        refreshEnum << [2 : "Refresh every 2 seconds"]
 		        refreshEnum << [5 : "Refresh every 5 seconds"]
+		        refreshEnum << [10 : "Refresh every 10 seconds"]
 		        refreshEnum << [15 : "Refresh every 15 seconds"]
 		        refreshEnum << [30 : "Refresh every 30 seconds"]
+		        refreshEnum << [45 : "Refresh every 45 seconds"]
 		        refreshEnum << [60 : "Refresh every 1 minute"]
-		        refreshEnum << [120 : "Refresh every 2 minutes"]
-		        refreshEnum << [300 : "Refresh every 5 minutes"]
+		        refreshEnum << [0 : "Never - stop polling"]
             input name: "enableDebug", type: "bool", title: "Enable debug logging", defaultValue: true
             input name: "enableDesc", type: "bool", title: "Enable descriptionText logging", defaultValue: true
-            input name: "refresh_Rate", type: "enum", title: "Polling Refresh Rate", options:refreshEnum, defaultValue: 5
+            input name: "refresh_Rate", type: "enum", title: "Polling Refresh Rate", options:refreshEnum, defaultValue: 30
             input name: 'showLogin', type: 'bool', title: 'Show SMA Webconnect Login', defaultValue: true, submitOnChange: true
         }
     }
@@ -95,12 +96,13 @@ void uninstalled(){
 void updated() {
     log.info "updated..."
     unschedule()
+    state.clear()
     log.warn "debug logging is: ${enableDebug == true}"
     log.warn "description logging is: ${enableDesc == true}"
-    state.clear()
-    state.polling = false
     
-    if (enableDebug) runIn(1800,logsOff)
+    if (refresh_Rate.toInteger() > 1) schedule("0/${refresh_Rate.toInteger()} * * * * ? *", refresh)
+    
+    if (enableDebug) runIn(1800,logsOff)        
 }
 
 void initialize() {
@@ -108,78 +110,79 @@ void initialize() {
    updated()
 }
 
-void parse(String description) {
-    if (enableDebug) log.debug "parse() description: ${description}"
-}
-
 /* ======== capability commands ======== */
 
 def refresh() {
     if (enableDebug) log.debug "refresh()"
     
-    if (!state.sid) {    
+    if (state.sid == null) {    
         state.sid = sma_login()
     }
-        
-    def loginOk = false
-    
-    if (state.sid) {
-        def status = sma_getValues(state.sid,sma_status)
-        if (getNestedVal(status,sma_status) != null) loginOk = true
-    }
 
-    if (!loginOk) {
+    if (state.sid == null) {
         sendEvent(name: "lastCheckin", value: "unknown")
         sendEvent(name: "status", value: "ERROR [check IP / UsrGrp / Pwd]")
-        state.sid = null
     } else {
         def now = new Date().format("yyyy MMM dd EEE h:mm:ss a", location.timeZone)
         sendEvent(name: "lastCheckin", value: now)
-        sendEvent(name: "status", value: "connected")
+        sendEvent(name: "status", value: "ok")
         
-        def nestedMap = sma_getValues(state.sid,[sma_metering_power_supplied,sma_pv_power,sma_metering_power_absorbed])
+        def params = [:]
+        params.uri = "https://${ip}:443/${sma_urlValues}?sid=${state.sid}"
+        params.body = '{"destDev":[],"keys":[' + keyList([sma_metering_power_supplied,sma_grid_power,sma_metering_power_absorbed]) + ']}'
+        params.contentType = "application/json"
+        params.ignoreSSLIssues = true
+    
+        if (enableDebug && enableRespDebug) log.warn "refresh() params: $params"
+    
+        asynchttpPost("doRefreshResp",params)        
+    }
+}
+
+def doRefreshResp(resp, data) {
+    if (enableDebug) log.debug "doRefreshResp() ${resp.data}"
+    def nestedMap = null
+    try {
+        resp.headers.each {
+            if (enableDebug && enableRespDebug) log.warn "doRefreshResp() resp.headers: ${it}"
+        }
+        
+        def respData = new groovy.json.JsonSlurper().parseText(resp.getData()) as Map
+
+        if (respData.containsKey("err")) {
+            sma_logout()    
+        }
+        
+        if (enableDebug && enableRespDebug) log.warn "doRefreshResp() resp.getData(): ${resp.getData()}"
+
+        if (respData.containsKey("result")) nestedMap = respData.result
         
         def metering_power_supplied = getNestedVal(nestedMap,sma_metering_power_supplied) 
-        def pv_power = getNestedVal(nestedMap,sma_pv_power) 
+        def sma_grid_power = getNestedVal(nestedMap,sma_grid_power) 
         def metering_power_absorbed = getNestedVal(nestedMap,sma_metering_power_absorbed) 
         
-        if (pv_power == null) pv_power = 0
+        if (sma_grid_power == null) sma_grid_power = 0
         if (metering_power_supplied == null) metering_power_supplied = 0
         if (metering_power_absorbed == null) metering_power_absorbed = 0
         
-        def power_consumption = pv_power - metering_power_supplied + metering_power_absorbed
+        def power_consumption = sma_grid_power - metering_power_supplied + metering_power_absorbed
         
-        sendEvent(name: "power", value: pv_power)
+        sendEvent(name: "power", value: sma_grid_power)
         sendEvent(name: "metering_power_supplied", value: metering_power_supplied)
         sendEvent(name: "metering_power_absorbed", value: metering_power_absorbed)
         sendEvent(name: "power_consumption", value: power_consumption)
         sendEvent(name: "energy", value: power_consumption/1000.0)
-    } 
-    
-    if (state.polling == true) { 
-        runInMillis(refresh_Rate.toInteger() * 1000, 'refresh')
-    } else {
-        sma_logout()        
+ 
+    } catch (e) {
+        if (enableDebug) log.debug "doRefreshResp() ERROR: $e"
+        state.sid = null
+        return
     }
 }
 
 def List<String> configure() {
     if (enableDebug) log.debug "configure()"
-    
-    state.clear()     
     return
-}
-
-def startPolling() {
-    if (enableDebug) log.debug "startPolling()"
-    if (state.polling == false) runInMillis(1000, 'refresh')
-    state.polling = true
-}
-
-def stopPolling() {
-    if (enableDebug) log.debug "stopPolling()"
-    state.polling = false
-    sma_logout()     
 }
 
 /* ======== custom commands and methods ======== */
@@ -219,7 +222,7 @@ private String sma_login() {
     def sid = null
     
     try {
-        httpPostJson(params) {
+        httpPostJson(params) { 
             resp -> resp.headers.each {
                 if (enableDebug && enableRespDebug) log.warn "sma_login() resp.headers: ${it.name} : ${it.value}"
             }
@@ -236,9 +239,7 @@ private String sma_login() {
     return sid
 }
 
-private sma_getValues(sid,_key) {
-    if (enableDebug) log.debug "sma_getValues() sid=$sid"
-    
+private keyList(_key) {
     def key = ""
     if (_key instanceof String) key = '"' + _key + '"'
     
@@ -248,18 +249,27 @@ private sma_getValues(sid,_key) {
         }
         key = key.substring(0, key.length() - 1)
     }
+    return key
+}
+
+private sma_getValues(sid,_key) {
+    if (enableDebug) log.debug "sma_getValues() sid=$sid"
     
     def params = [:]
     params.uri = "https://${ip}:443/${sma_urlValues}?sid=$sid"
-    params.body = '{"destDev":[],"keys":[' + key + ']}'
+    params.body = '{"destDev":[],"keys":[' + keyList(_key) + ']}'
+    params.contentType = "application/json"
     params.ignoreSSLIssues = true
     
     if (enableDebug && enableRespDebug) log.warn "sma_getValues() params: $params"
     
     def value = null
     
+    //asynchttpPostJson("test",params)
+    
     try {
-        httpPostJson(params) {
+        //httpPostJson(params) {
+        httpPost(params) {
             resp -> resp.headers.each {
                 if (enableDebug && enableRespDebug) log.warn "sma_getValues() resp.headers: ${it.name} : ${it.value}"
             }
@@ -277,7 +287,7 @@ private sma_getValues(sid,_key) {
 }
 
 private sma_logout() {
-    if (!state.sid) return
+    if (state.sid == null) return
     if (enableDebug) log.debug "sma_logout() sid=${state.sid}"
     def params = [:]
     params.uri = "https://${ip}:443/${sma_urlLogout}?sid=${state.sid}"
