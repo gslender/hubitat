@@ -16,24 +16,27 @@
  *
  *  Last modified: 2021-06-25
  *
- *  Portions of this code was borrowed from Christos Psaroudis 
+ *  Portions of this code was borrowed from Christos Psaroudis
  *  https://github.com/C-PS/Hubitat/blob/main/drivers/DimmerSwitchDriver.txt
- */ 
- 
+ */
+
+import java.security.MessageDigest
+
 metadata {
-    definition (name: "Ikuu Zigbee Single Gang Light Dimmer", namespace: "gslender", author: "Grant Slender", importUrl: 
+    definition (name: "Ikuu Zigbee Single Gang Light Dimmer", namespace: "gslender", author: "Grant Slender", importUrl:
                 "https://raw.githubusercontent.com/gslender/hubitat/main/ikuu-zigbee-single-gang-light-dimmer.groovy") {
-    
+
     capability "Refresh"
     capability "Configuration"
+    capability "Initialize"
 
     capability "Switch"
     capability "Switch Level"
 
-    fingerprint profileId: "0104", inClusters: "0000,0004,0005,EF00", outClusters: "0019,000A", manufacturer: "_TZE200_9i9dt8is", model: "TS0601", deviceJoinName: "Ikuu Zigbee Single Gang Light Dimmer"
+    fingerprint profileId: "0104", inClusters: "0000,0003,0004,0005,0006,0008,0300,EF00", outClusters: "0019,000A", manufacturer: "_TZE200_swaamsoy", model: "TS0601", deviceJoinName: "Ikuu Zigbee Single Gang Light Dimmer"
     }
-    
-      
+
+
 preferences {
       input name: "enableDebug", type: "bool", title: "Enable debug logging", defaultValue: true
       input name: "enableDesc", type: "bool", title: "Enable descriptionText logging", defaultValue: true
@@ -62,7 +65,7 @@ void updated() {
 }
 
 void initialize() {
-   log.info "initialize..."    
+   log.info "initialize..."
    device.setName("IKUU-SINGLE-LIGHT-DIMMER")
    updated();
    configure()
@@ -72,40 +75,43 @@ void initialize() {
 
 // Parse incoming device messages to generate events
 def parse(String description) {
-    if (enableDebug) log.debug "parse() description: ${description}"
+//    if (enableDebug) log.debug "parse() description: ${description}"
 
     if (description?.startsWith('catchall:')) {
         msg = zigbee.parseDescriptionAsMap(description)
-        if (enableDebug) log.debug "parseDescriptionAsMap() msg: ${msg}"
         switch(msg.clusterId) {
-            case "EF00": 
+            case "EF00":
                 def attribute = getAttribute(msg.data)
                 def value = getAttributeValue(msg.data)
-            
+
                 switch (attribute) {
-                    case "switch": 
+                    case "switch":
                         switch(value) {
                             case 0:
-                                if (enableDebug) log.debug "sendEvent(switch,off)"
+                                if (enableDebug) log.debug "sendEvent(switch,off) - $attribute:$value"
                                 sendEvent(name: "switch", value: "off")
                             break;
 
                             case 1:
-                                if (enableDebug) log.debug "sendEvent(switch,on)"
+                                if (enableDebug) log.debug "sendEvent(switch,on) - $attribute:$value"
                                 sendEvent(name: "switch", value: "on")
                             break;
-                        }     
+                        }
                     break;
-                
-                    case "level": 
-                        if (enableDebug) log.debug "sendEvent(level,${value / 10})"
+
+                    case "level":
+                        if (enableDebug) log.debug "sendEvent(level,${value / 10}) - $attribute:$value"
+                        if (enableDebug) log.debug "parseDescriptionAsMap() msg: ${msg}"
                         sendEvent(name: "level", value: value / 10)
                     break;
                 }
-        
+
             break;
+            default:
+                if (enableDebug) log.debug "parseDescriptionAsMap() msg: ${msg}"
+
         }
-    }       
+    }
 }
 
 private String getAttribute(ArrayList _data) {
@@ -118,13 +124,13 @@ private String getAttribute(ArrayList _data) {
             retValue = "level"
         }
     }
-    
+
     return retValue
 }
 
 private int getAttributeValue(ArrayList _data) {
     int retValue = 0
-    
+
     if (_data.size() >= 6) {
         int dataLength = _data[5] as Integer
         int power = 1;
@@ -133,8 +139,13 @@ private int getAttributeValue(ArrayList _data) {
             power = power * 256
         }
     }
-    
+
     return retValue
+}
+
+def logsOff(){
+    log.warn "debug logging disabled..."
+    device.updateSetting("enableDebug",[value:"false",type:"bool"])
 }
 
 def off() {
@@ -147,12 +158,11 @@ def on() {
     zigbee.command(0xEF00, 0x0, "00010101000101")
 }
 
-def setLevel(value) {
-    if (enableDebug) log.debug "setLevel() value:${value}"
+def setLevel(value, rate = 0) {
     if (value >= 0 && value <= 100) {
-        Map commandParams = [:]
         String commandPayload = "0001020200040000" + zigbee.convertToHexString((value * 10) as Integer, 4)
-        zigbee.command(0xEF00, 0x0, commandPayload)
+        if (enableDebug) log.debug "setLevel() value:${value} - $commandPayload"
+        zigbee.command(0xEF00, 0x0, commandPayload) //0xFC04
     }
 }
 
