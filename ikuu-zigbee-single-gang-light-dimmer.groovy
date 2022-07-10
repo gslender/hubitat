@@ -165,12 +165,19 @@ def on() {
 
 
 def setLevel(value, rate = 0) {
-    if (value >= 0 && value <= 100) {      
-        String seq = "00" + zigbee.convertToHexString(rand(256), 2)
-        String commandPayload = seq + "020200040000" + zigbee.convertToHexString((value * 10) as Integer, 4)
-        //String commandPayload = "2222020200040000" + zigbee.convertToHexString((value * 10) as Integer, 4)
-        if (enableDebug) log.debug "setLevel() value:${value} - $commandPayload"        
-        zigbee.command(0xEF00, 0x0, null, 200, commandPayload)  +  zigbee.command(0xEF00, 0x0, null, 500, "11110100000001")
+    if (value >= 0 && value <= 100) {       
+        if (device.currentValue("level") != null && device.currentValue("switch") == "off" && value >= device.currentValue("level")-1 && value <= device.currentValue("level")+1) {
+            //If the dimmer is currently off and the desired dimmer level is +-1 from current level, then just perform an "on()".
+            //This resolves an issue where the dimmer wouldn't turn on if it is turned on using the setLevel function and the desired 
+            //dimmer level is the same as the current dimmer level.
+            on()
+        } else {
+            String seq = "00" + zigbee.convertToHexString(rand(256), 2)
+            String commandPayload = seq + "020200040000" + zigbee.convertToHexString((value * 10) as Integer, 4)
+            //String commandPayload = "2222020200040000" + zigbee.convertToHexString((value * 10) as Integer, 4)
+            if (enableDebug) log.debug "setLevel() value:${value} - $commandPayload"        
+            zigbee.command(0xEF00, 0x0, null, 200, commandPayload)  +  zigbee.command(0xEF00, 0x0, null, 500, "11110100000001")
+        }
     }
 }
 
