@@ -25,8 +25,7 @@ import java.security.MessageDigest
 metadata {
     definition (name: "Ikuu Zigbee Single Gang Light Dimmer", namespace: "gslender", author: "Grant Slender", importUrl:
                 "https://raw.githubusercontent.com/gslender/hubitat/main/ikuu-zigbee-single-gang-light-dimmer.groovy") {
-
-    capability "Refresh"
+    
     capability "Configuration"
     capability "Initialize"
 
@@ -66,7 +65,7 @@ void updated() {
 
 void initialize() {
    log.info "initialize..."
-   device.setName("IKUU-SINGLE-LIGHT-DIMMER")
+   //device.setName("IKUU-SINGLE-LIGHT-DIMMER")
    updated();
    configure()
    unschedule()
@@ -75,7 +74,6 @@ void initialize() {
 
 // Parse incoming device messages to generate events
 def parse(String description) {
-//    if (enableDebug) log.debug "parse() description: ${description}"
 
     if (description?.startsWith('catchall:')) {
         msg = zigbee.parseDescriptionAsMap(description)
@@ -86,6 +84,7 @@ def parse(String description) {
 
                 switch (attribute) {
                     case "switch":
+                        if (enableDebug) log.debug "known msg.command: ${msg.command}"
                         switch(value) {
                             case 0:
                                 if (enableDebug) log.debug "sendEvent(switch,off) - $attribute:$value"
@@ -100,17 +99,20 @@ def parse(String description) {
                     break;
 
                     case "level":
+                        if (enableDebug) log.debug "known msg.command: ${msg.command}"
                         if (enableDebug) log.debug "sendEvent(level,${value / 10}) - $attribute:$value"
-                        if (enableDebug) log.debug "parseDescriptionAsMap() msg: ${msg}"
                         sendEvent(name: "level", value: value / 10)
                     break;
+                    
+                    default:                        
+                        if (enableDebug) log.debug "unknown msg.command: ${msg.command} ${msg.data}"
                 }
 
             break;
-            default:
-                if (enableDebug) log.debug "parseDescriptionAsMap() msg: ${msg}"
-
+            
         }
+    } else { 
+        if (enableDebug) log.debug "parse() description: ${description}" 
     }
 }
 
@@ -150,28 +152,32 @@ def logsOff(){
 
 def off() {
     if (enableDebug) log.debug "off()"
-    zigbee.command(0xEF00, 0x0, "00010101000100")
+    String seq = "00" + zigbee.convertToHexString(rand(256), 2)
+    zigbee.command(0xEF00, 0x0, null, 500, seq+"0100000000")
+
 }
 
 def on() {
     if (enableDebug) log.debug "on()"
-    zigbee.command(0xEF00, 0x0, "00010101000101")
+    String seq = "00" + zigbee.convertToHexString(rand(256), 2)
+    zigbee.command(0xEF00, 0x0, null, 500, seq+"0100000001")
 }
 
+
 def setLevel(value, rate = 0) {
-    if (value >= 0 && value <= 100) {
-        String commandPayload = "0001020200040000" + zigbee.convertToHexString((value * 10) as Integer, 4)
-        if (enableDebug) log.debug "setLevel() value:${value} - $commandPayload"
-        zigbee.command(0xEF00, 0x0, commandPayload) //0xFC04
+    if (value >= 0 && value <= 100) {      
+        String seq = "00" + zigbee.convertToHexString(rand(256), 2)
+        String commandPayload = seq + "020200040000" + zigbee.convertToHexString((value * 10) as Integer, 4)
+        //String commandPayload = "2222020200040000" + zigbee.convertToHexString((value * 10) as Integer, 4)
+        if (enableDebug) log.debug "setLevel() value:${value} - $commandPayload"        
+        zigbee.command(0xEF00, 0x0, null, 200, commandPayload)  +  zigbee.command(0xEF00, 0x0, null, 500, "11110100000001")
     }
 }
 
-def refresh() {
-    if (enableDebug) log.debug "refresh()"
-    zigbee.command(0xEF00, 0x0, "00020100")
-}
+
+private rand(n) { return (new Random().nextInt(n))} 
 
 def configure() {
-    if (enableDebug) log.debug "configure()"
-    zigbee.onOffConfig() + zigbee.levelConfig() + zigbee.onOffRefresh() + zigbee.levelRefresh()
+    if (enableDebug) log.debug "configure() does nothing"
+//    zigbee.onOffConfig() + zigbee.levelConfig() + zigbee.onOffRefresh() + zigbee.levelRefresh() 
 }
