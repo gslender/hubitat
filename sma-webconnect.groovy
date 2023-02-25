@@ -45,6 +45,9 @@ metadata {
           
         attribute "status", "STRING"
         attribute "lastCheckin", "STRING" 
+        attribute "metering_power_supplied", "NUMBER"
+        attribute "metering_power_absorbed", "NUMBER"
+        attribute "power_consumption", "NUMBER" 
     }
     
     preferences {
@@ -65,6 +68,8 @@ metadata {
 		        refreshEnum << [30 : "Refresh every 30 seconds"]
 		        refreshEnum << [45 : "Refresh every 45 seconds"]
 		        refreshEnum << [60 : "Refresh every 1 minute"]
+		        refreshEnum << [120 : "Refresh every 2 minute"]
+		        refreshEnum << [300 : "Refresh every 5 minute"]
 		        refreshEnum << [0 : "Never - stop polling"]
             input name: "enableDebug", type: "bool", title: "Enable debug logging", defaultValue: true
             input name: "enableDesc", type: "bool", title: "Enable descriptionText logging", defaultValue: true
@@ -84,7 +89,7 @@ void installed(){
    device.updateSetting("showLogin",[type:"bool", value: true])
    device.updateSetting("enableDebug",[type:"bool", value: true])
    device.updateSetting("enableDesc",[type:"bool", value: true])
-   device.updateSetting("refresh_Rate",[type:"enum", value: 5])
+   device.updateSetting("refresh_Rate",[type:"enum", value: 30])
    initialize()
 }
 
@@ -100,7 +105,14 @@ void updated() {
     log.warn "debug logging is: ${enableDebug == true}"
     log.warn "description logging is: ${enableDesc == true}"
     
-    if (refresh_Rate.toInteger() > 1) schedule("0/${refresh_Rate.toInteger()} * * * * ? *", refresh)
+    int rate = refresh_Rate.toInteger()
+    
+    if (rate < 60) {
+        if (rate > 1) schedule("0/$rate * * ? * *", refresh)
+    } else {
+        schedule("0 0/${rate / 60} * ? * *", refresh)
+    }
+    
     
     if (enableDebug) runIn(1800,logsOff)        
 }
@@ -135,6 +147,7 @@ def refresh() {
     
         if (enableDebug && enableRespDebug) log.warn "refresh() params: $params"
     
+        // asynchttpPost("doRefreshResp",params)        
         asynchttpPost("doRefreshResp",params)        
     }
 }
@@ -172,10 +185,12 @@ def doRefreshResp(resp, data) {
         sendEvent(name: "metering_power_absorbed", value: metering_power_absorbed)
         sendEvent(name: "power_consumption", value: power_consumption)
         sendEvent(name: "energy", value: power_consumption/1000.0)
+        
+        sma_logout()
  
     } catch (e) {
-        if (enableDebug) log.debug "doRefreshResp() ERROR: $e"
-        state.sid = null
+        if (enableDebug) log.debug "doRefreshResp() ERROR: $e"        
+        if (state.sid != null) sma_logout()    
         return
     }
 }
