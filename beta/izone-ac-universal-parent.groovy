@@ -19,9 +19,9 @@ import groovy.json.JsonOutput
  *
  *  Last modified: 2021-07-19
  *
- */
+ */ 
 
-@Field Map getFanLevel = ["low": 25 ,"medium": 50,"high": 100]
+@Field Map getFanLevel = ["low": 25 ,"medium": 50,"high": 100]      
 @Field Map getZoneModeLevel = ["open": 1 ,"close": 2,"auto": 3,"override": 4,"constant": 5]
 @Field Map getModeLevel = ["cool": 1 ,"heat": 2,"vent": 3,"dry": 4,"auto": 5,"exhuast": 6,"pump": 7]
 @Field Map getBatteryLevel = ["full": 0 ,"half": 1,"empty": 2]
@@ -38,12 +38,13 @@ metadata {
         capability "FanControl"
         capability "Thermostat"
         capability "Battery"
-
+        capability "Initialize"
+          
         attribute "firmware", "STRING"
         attribute "switch", "STRING"
         attribute "speed", "STRING"
         attribute "battery", "NUMBER"
-        attribute "temperature", "NUMBER"
+        attribute "temperature", "NUMBER"        
         attribute "thermostatSetpoint", "NUMBER"
         attribute "thermostatMode", "STRING"
         attribute "ctrlZone", "STRING"
@@ -52,16 +53,16 @@ metadata {
         attribute "supportedFanSpeeds", "JSON_OBJECT"
         attribute "supportedThermostatFanModes", "JSON_OBJECT"
         attribute "supportedThermostatModes", "JSON_OBJECT"
-
+        
         command "discoverBridge"
-
+        
         command "setSpeed", [[name: "Fan speed*",type:"ENUM", description:"Fan speed to set", constraints: getFanLevel.collect {k,v -> k}]]
-
+        
         command "setThermostatMode", [[name: "AC mode*",type:"ENUM", description:"Cooling/heating mode to set", constraints: getModeLevel.collect {k,v -> k}]]
-
+        
  //       command "devSendCmd"
     }
-
+    
     preferences {
         def refreshEnum = [:]
 		    refreshEnum << ["1 min" : "Refresh every minute"]
@@ -75,8 +76,8 @@ metadata {
         input name: "enableDesc", type: "bool", title: "Enable descriptionText logging", defaultValue: true
         input name: "ip", type: "string", title:"Bridge IP" , required: true
         input name: "refresh_Rate", type: "enum", title: "Polling Refresh Rate", options:refreshEnum, defaultValue: "5 min"
-
-//        input name: "devcmdbody", type: "string", title:"DEV Only Send Cmd", defaultValue:"{\"SysOn\":1}"
+        
+//        input name: "devcmdbody", type: "string", title:"DEV Only Send Cmd", defaultValue:"{\"SysOn\":1}" 
     }
 }
 
@@ -123,12 +124,12 @@ void updated() {
 	}
 	if (enableDebug) log.debug "runEvery${refresh_Rate}Minute(s) refresh() "
     refresh()
-
+    
    if (enableDebug) runIn(1800,logsOff)
 }
 
 void initialize() {
-    log.info "initialize..."
+    log.info "initialize..." 
     discoverBridge()
     state.sysinfo = [:]
     state.zones = [:]
@@ -137,7 +138,7 @@ void initialize() {
 
 void parse(description) {
     if (enableDebug) log.debug "parse() description: ${description}"
-
+    
     try {
         def map = parseDescriptionAsMap(description)
         def list = hexToASCII(map.get("payload")).tokenize(',')
@@ -146,7 +147,7 @@ void parse(description) {
             if (it.startsWith("IP_")) {
                 ip_addr = it.reverse().take(it.length()-3).reverse()
             }
-        }
+        }    
         device.updateSetting("ip",[type:"string", value: ip_addr])
     } catch (e) {
         if (enableDebug) log.debug "parse() error $e"
@@ -158,22 +159,22 @@ void parse(description) {
 def off() {
     if (enableDebug) log.debug "off()"
     sendSimpleiZoneCmd("SysOn",0) // - is the on/off setting, 0 = stop air con, 1 = run air con
-
+    
     runInMillis(500, 'refresh')
 }
 
 def on() {
     if (enableDebug) log.debug "on()"
     sendSimpleiZoneCmd("SysOn",1) // - is the on/off setting, 0 = stop air con, 1 = run air con
-
+    
     runInMillis(500, 'refresh')
 }
 
 def setSpeed(_speed) {
     if (enableDebug) log.debug "setSpeed() speed: $_speed"
-
+    
     def speed = 0
-
+    
     switch (_speed) {
        case "off":
        case "low":
@@ -190,17 +191,17 @@ def setSpeed(_speed) {
           speed = 3
        break
     }
-
+    
     sendSimpleiZoneCmd("SysFan",speed) // - is the new fan speed 1-4
-
+    
     runInMillis(500, 'refresh')
 }
 
 def cycleSpeed() {
     if (enableDebug) log.debug "cycleSpeed()"
-
+    
     String currentSpeed = device.currentValue("speed") ?: "off"
-
+    
     switch (currentSpeed) {
        case "low":
            sendSimpleiZoneCmd("SysFan",2)
@@ -221,14 +222,14 @@ def cycleSpeed() {
 
 def auto() {
     if (enableDebug) log.debug "auto()"
-
-    setThermostatMode("auto")
+    
+    setThermostatMode("auto") 
 }
 
 def cool() {
     if (enableDebug) log.debug "cool()"
-
-    setThermostatMode("cool")
+    
+    setThermostatMode("cool") 
 }
 
 def emergencyHeat() {
@@ -249,8 +250,8 @@ def fanOn() {
 
 def heat() {
     if (enableDebug) log.debug "heat()"
-
-    setThermostatMode("heat")
+    
+    setThermostatMode("heat") 
 }
 
 def setCoolingSetpoint(temperature) {
@@ -265,7 +266,7 @@ def setHeatingSetpoint(temperature) {
 
 private setSetpoint(temperature) {
     if (enableDebug) log.debug "setSetpoint() temperature: $temperature"
-    sendSimpleiZoneCmd("SysSetpoint",(temperature*100).toInteger())
+    sendSimpleiZoneCmd("SysSetpoint",(temperature*100).toInteger()) 
     runInMillis(500, 'refresh')
 }
 
@@ -275,56 +276,56 @@ def setSchedule(json) {
 
 def setThermostatFanMode(fanmode) {
     if (enableDebug) log.debug "setThermostatFanMode()"
-    setSpeed(fanmode)
+    setSpeed(fanmode) 
 }
 
 def setThermostatMode(thermostatmode) {
     if (enableDebug) log.debug "setMode() mode: $thermostatmode"
-
-    def mode = getModeLevel[thermostatmode]
-    sendSimpleiZoneCmd("SysMode",mode)
-
+    
+    def mode = getModeLevel[thermostatmode]    
+    sendSimpleiZoneCmd("SysMode",mode) 
+    
     runInMillis(500, 'refresh')
 }
 
 def refresh() {
     if (enableDebug) log.debug "refresh()"
-
-    // connect and getSystemInfo
+    
+    // connect and getSystemInfo 
     def result = getSystemInfo()
-
+    
     if (result.status == "ok") {
         def now = new Date().format("yyyy MMM dd EEE h:mm:ss a", location.timeZone)
         sendEvent(name: "lastCheckin", value: now)
         state.sysinfo = result.SystemV2
         sendiZoneEvents()
-
+        
         // getZonesInfo
         state.zones.clear()
         def worstBattVolt = 0
         result.SystemV2.NoOfZones.times {
             def resultZone = getZonesInfo(it)
-            if (resultZone.status == "ok") {
+            if (resultZone.status == "ok") {    
                 def zonename = "zone${it+1}"
                 state.zones.put(zonename, resultZone.ZonesV2)
                 def hubitatThermoAttrib = convertiZoneToHubitat(resultZone.ZonesV2)
                 childSendEvent("${device.getDeviceNetworkId()}-$zonename",hubitatThermoAttrib)
                 if (resultZone.ZonesV2.BattVolt.toInteger() > worstBattVolt) worstBattVolt = resultZone.ZonesV2.BattVolt.toInteger()
-            }
+            }  
         }
-
+        
         //send battery
         sendEvent(name: "battery", value: getBatteryPcnt.find { it.value == worstBattVolt }?.key)
-
+        
         //getFirmwareList
         if (state.firmware == null) {
             def resultFmw = getFirmwareList()
             if (resultFmw.status == "ok") {
                 state.firmware = resultFmw.Fmw
-            }
+            }   
         }
         sendEvent(name: "firmware", value: state.firmware)
-
+        
     } else {
         sendEvent(name: "lastCheckin", value: "unknown")
         sendEvent(name: "help", value: "check IP is correct")
@@ -334,26 +335,26 @@ def refresh() {
 
 def List<String> configure() {
     if (enableDebug) log.debug "configure()"
-
+    
     // clean stuff up !!
-    state.clear()
+    state.clear() 
     state.sysinfo = [:]
     state.zones = [:]
     state.firmware = null
     if (removeChildren) {
-        getChildDevices().each {
+        getChildDevices().each { 
             if (enableDebug) log.debug "deleteChildDevice ${it.deviceNetworkId}"
-            deleteChildDevice("${it.deviceNetworkId}")
+            deleteChildDevice("${it.deviceNetworkId}") 
         }
     }
-
+    
     // connect and refresh
     refresh()
-
+    
     state.zones.eachWithIndex { zoneNo, zoneData, index ->
         addChildThermostat(zoneNo,zoneData.Name)
     }
-
+    
     // populate the children
     refresh()
 }
@@ -361,17 +362,17 @@ def List<String> configure() {
 /* ======== custom commands and methods ======== */
 
 def discoverBridge() {
-    if (enableDebug) log.debug "discoverBridge()"
+    if (enableDebug) log.debug "discoverBridge()"   
     def myHubAction = new hubitat.device.HubAction("IASD", hubitat.device.Protocol.LAN,[type: hubitat.device.HubAction.Type.LAN_TYPE_UDPCLIENT,destinationAddress: "255.255.255.255:12107"])
     sendHubCommand(myHubAction)
 }
 
 def devSendCmd() {
     if (enableDebug) log.debug "devSendCmd() devcmdbody: $devcmdbody"
-    sendSimpleiZoneCmd(devcmdbody)
-
+    sendSimpleiZoneCmd(devcmdbody) 
+    
     runInMillis(500, 'refresh')
-}
+} 
 
 private parseDescriptionAsMap(description) {
     try {
@@ -400,38 +401,39 @@ private String hexToASCII(String hexValue) {
 
 private tmpRnd(BigDecimal temp) {
     return temp.divide(100,1, BigDecimal.ROUND_HALF_UP)
-
+ 
 }
 
 private sendiZoneEvents() {
 /*
 thermostatOperatingState - ENUM ["heating", "pending cool", "pending heat", "vent economizer", "idle", "cooling", "fan only"]
-*/
+*/    
     sendEvent(name: "temperature", value: tmpRnd(state.sysinfo.Temp))
+    sendEvent(name: "ductTemp", value: tmpRnd(state.sysinfo.Supply))
     sendEvent(name: "thermostatSetpoint", value: tmpRnd(state.sysinfo.Setpoint))
     sendEvent(name: "coolingSetpoint", value: tmpRnd(state.sysinfo.Setpoint))
-    sendEvent(name: "heatingSetpoint", value: tmpRnd(state.sysinfo.Setpoint))
-    sendEvent(name: "supportedFanSpeeds", value: getFanLevel.collect {k,v -> k})
-    sendEvent(name: "supportedThermostatFanModes", value: getFanLevel.collect {k,v -> k})
-    sendEvent(name: "supportedThermostatModes", value: getModeLevel.collect {k,v -> k})
-
+    sendEvent(name: "heatingSetpoint", value: tmpRnd(state.sysinfo.Setpoint))   
+    sendEvent(name: "supportedFanSpeeds", value: groovy.json.JsonOutput.toJson(getFanLevel.collect {k,v -> k}))
+    sendEvent(name: "supportedThermostatFanModes", value: groovy.json.JsonOutput.toJson(getFanLevel.collect {k,v -> k}))
+    sendEvent(name: "supportedThermostatModes", value: groovy.json.JsonOutput.toJson(getModeLevel.collect {k,v -> k}))
+    
     def ctrlZone = state.zones.get("zone${state.sysinfo.CtrlZone+1}")
     if (ctrlZone != null) sendEvent(name: "ctrlZone", value: ctrlZone.Name)
-
+    
     if (state.sysinfo.SysOn == 0) {
         sendEvent(name: "switch", value: "off")
         sendEvent(name: "speed", value: "off")
-        sendEvent(name: "thermostatFanMode", value: "off")
-        sendEvent(name: "thermostatMode", value: "off")
-        sendEvent(name: "thermostatOperatingState", value: "off")
+        sendEvent(name: "thermostatFanMode", value: "off")        
+        sendEvent(name: "thermostatMode", value: "off")     
+        sendEvent(name: "thermostatOperatingState", value: "off")     
     } else {
         sendEvent(name: "switch", value: "on")
         sendEvent(name: "speed", value: getFanMode())
         sendEvent(name: "thermostatFanMode", value: getFanMode())
         sendEvent(name: "thermostatMode", value: getModeLevel.find { it.value == state.sysinfo.SysMode }?.key)
-        sendEvent(name: "thermostatOperatingState", value: getModeLevel.find { it.value == state.sysinfo.SysMode }?.key)
+        sendEvent(name: "thermostatOperatingState", value: getModeLevel.find { it.value == state.sysinfo.SysMode }?.key) 
     }
-
+    
     sendEvent(name: "warnings", value: state.sysinfo.Warnings)
     sendEvent(name: "acError", value: state.sysinfo.ACError)
 }
@@ -461,15 +463,15 @@ thermostatOperatingState - ENUM ["heating", "pending cool", "pending heat", "ven
 */
     def map = [:]
     map.put("temperature",tmpRnd(_izone.Temp))
-    def setPoint = _izone.Setpoint
-
+    def setPoint = _izone.Setpoint 
+    
     def now = new Date().format("yyyy MMM dd EEE h:mm:ss a", location.timeZone)
     map.put("lastCheckin", now)
-
-    map.put("supportedThermostatModes",getZoneModeLevel.collect {k,v -> k})
-    map.put("supportedThermostatFanModes",getFanLevel.collect {k,v -> k})
+    
+    map.put("supportedThermostatModes",groovy.json.JsonOutput.toJson(getZoneModeLevel.collect {k,v -> k}))
+    map.put("supportedThermostatFanModes",groovy.json.JsonOutput.toJson(getFanLevel.collect {k,v -> k}))
     map.put("thermostatFanMode",getFanMode())
-
+    
     def mode = "off"
     switch (_izone.Mode) {
         case 1: // ZoneMode_Open
@@ -495,14 +497,14 @@ thermostatOperatingState - ENUM ["heating", "pending cool", "pending heat", "ven
         default:
             break
     }
-
+    
     map.put("thermostatMode",mode)
     map.put("thermostatOperatingState",mode)
 
     map.put("coolingSetpoint",tmpRnd(setPoint))
     map.put("heatingSetpoint",tmpRnd(setPoint))
-    map.put("thermostatSetpoint",tmpRnd(setPoint))
-
+    map.put("thermostatSetpoint",tmpRnd(setPoint))    
+    
     map.put("battVolt", getBatteryLevel.find { it.value == _izone.BattVolt }?.key)
     map.put("sensorFault", (_izone.SensorFault == 0) ? 'none' : 'fault')
 
@@ -514,8 +516,9 @@ private childSendEvent(_childname,_attrib,_value) {
 }
 
 private childSendEvent(_childname,_map) {
-    if (enableDebug) log.debug "childSendEvent(${_childname},${_map})"
-
+    if (enableDebug) log.debug "childSendEvent(${_childname},${_map})"  
+    
+    //getChildDeviceParse("${device.deviceNetworkId}-Fan","supportedFanSpeeds", supportedFanSpeeds) 
     def child = getChildDevice(_childname)
     if (child) {
         _map.each {
@@ -535,37 +538,37 @@ private Map sendSimpleiZoneCmd(cmdbody) {
     def params = [:]
     params.uri = "http://${ip}:80/iZoneCommandV2"
     params.body = cmdbody
-
+       
     if (enableDebug) log.debug "sendSimpleiZoneCmd() params: $params"
-
+    
     try {
-
-        httpPost(params) { resp ->
-
+        
+        httpPost(params) { resp -> 
+            
             resp.headers.each {
                 if (enableDebug && enableRespDebug) log.warn "resp.headers: ${it.name} : ${it.value}"
             }
-
+            
             respData = resp.data.text
-        }
+        } 
     } catch (e) {
         if (enableDebug) log.debug "sendSimpleiZoneCmd() ERROR: $e"
         return [status:"failed: $e"]
     }
-
+                
     if (enableDebug && enableRespDebug) log.warn "resp.data.text: ${respData}"
-
+    
     if (!respData.startsWith("{OK}")) {
         log.warn "$cmdbody returned $respData"
     }
-
+    
     return [status:"$respData"]
 }
 
 private Map getSystemInfo() {
     if (enableDebug) log.debug "getSystemInfo()"
     def respData = [:]
-
+    
     def uri = "http://${ip}:80/iZoneRequestV2"
     def mapBody = ["iZoneV2Request":["Type": 1,"No": 0,"No1": 0]] as Map
 
@@ -575,11 +578,11 @@ private Map getSystemInfo() {
             resp -> resp.headers.each {
                 if (enableDebug && enableRespDebug) log.warn "resp.headers: ${it.name} : ${it.value}"
             }
-
+            
             respData = resp.getData() as Map
             if (enableDebug && enableRespDebug) log.warn "resp.data: ${respData.toString()}"
             if (respData.containsKey("SystemV2")) respData.status = "ok"
-        }
+        } 
     } catch (e) {
         if (enableDebug) log.debug "getSystemInfo() ERROR: $e"
         respData.status = "failed: $e"
@@ -587,10 +590,10 @@ private Map getSystemInfo() {
     return respData
 }
 
-private Map getZonesInfo(int zone) {
+private Map getZonesInfo(int zone) { 
     if (enableDebug) log.debug "getZonesInfo() zone: $zone"
     def respData = [:]
-
+    
     def uri = "http://${ip}:80/iZoneRequestV2"
     def mapBody = ["iZoneV2Request":["Type": 2,"No": zone,"No1": 0]] as Map
 
@@ -600,11 +603,11 @@ private Map getZonesInfo(int zone) {
             resp -> resp.headers.each {
                 if (enableDebug && enableRespDebug) log.warn "resp.headers: ${it.name} : ${it.value}"
             }
-
+            
             respData = resp.getData() as Map
             if (enableDebug && enableRespDebug) log.warn "resp.data: ${respData.toString()}"
             if (respData.containsKey("ZonesV2")) respData.status = "ok"
-        }
+        } 
     } catch (e) {
         if (enableDebug) log.debug "getZonesInfo() ERROR: $e"
         respData.status = "failed: $e"
@@ -612,10 +615,10 @@ private Map getZonesInfo(int zone) {
     return respData
 }
 
-private Map getACUnitFaults() {
+private Map getACUnitFaults() { 
     if (enableDebug) log.debug "getACUnitFaults()"
     def respData = [:]
-
+    
     def uri = "http://${ip}:80/iZoneRequestV2"
     def mapBody = ["iZoneV2Request":["Type": 4,"No": 0,"No1": 0]] as Map
 
@@ -625,11 +628,11 @@ private Map getACUnitFaults() {
             resp -> resp.headers.each {
                 if (enableDebug && enableRespDebug) log.warn "resp.headers: ${it.name} : ${it.value}"
             }
-
+            
             respData = resp.getData() as Map
             if (enableDebug && enableRespDebug) log.warn "resp.data: ${respData.toString()}"
             if (respData.containsKey("AcUnitFaultHistV2")) respData.status = "ok"
-        }
+        } 
     } catch (e) {
         if (enableDebug) log.debug "getACUnitFaults() ERROR: $e"
         respData.status = "failed: $e"
@@ -637,10 +640,10 @@ private Map getACUnitFaults() {
     return respData
 }
 
-private Map getFirmwareList() {
+private Map getFirmwareList() { 
     if (enableDebug) log.debug "getFirmwareList()"
     def respData = [:]
-
+    
     def uri = "http://${ip}:80/iZoneRequestV2"
     def mapBody = ["iZoneV2Request":["Type": 6,"No": 0,"No1": 0]] as Map
 
@@ -650,11 +653,11 @@ private Map getFirmwareList() {
             resp -> resp.headers.each {
                 if (enableDebug && enableRespDebug) log.warn "resp.headers: ${it.name} : ${it.value}"
             }
-
+            
             respData = resp.getData() as Map
             if (enableDebug && enableRespDebug) log.warn "resp.data: ${respData.toString()}"
             if (respData.containsKey("Fmw")) respData.status = "ok"
-        }
+        } 
     } catch (e) {
         if (enableDebug) log.debug "getFirmwareList() ERROR: $e"
         respData.status = "failed: $e"
@@ -663,16 +666,16 @@ private Map getFirmwareList() {
 }
 
 def addChildThermostat(String zone,String label) {
-    if (enableDebug) log.debug "addChildThermostat() zone: $zone label: $label"
+    if (enableDebug) log.debug "addChildThermostat() zone: $zone label: $label" 
     def devLabel = device.label
     if (devLabel == null) devLabel = device.name
-
+    
     def childname = "${device.getDeviceNetworkId()}-${zone}"
     if (!getChildDevice(childname)) {
-        addChildDevice("hubitat","Generic Component Thermostat", childname,
+        addChildDevice("hubitat","Generic Component Thermostat", childname, 
             [label: "${devLabel}-${label}",name: "${zone}-${label}", isComponent: true])
     } else {
-        if (enableDebug) log.debug "child exists !! $childname not created !!"
+        if (enableDebug) log.debug "child exists !! $childname not created !!" 
     }
 }
 
@@ -685,30 +688,30 @@ def logsOff() {
 
 void componentRefresh(cd) {
     if (enableDebug) log.debug "componentRefresh ${cd.displayName}"
-
+    
     def zoneIndex = (cd.getDeviceNetworkId().drop(cd.getDeviceNetworkId().size() - 1).toInteger())-1
     def resultZone = getZonesInfo(zoneIndex)
-    if (resultZone.status == "ok") {
+    if (resultZone.status == "ok") {    
         def zonename = "zone${zoneIndex+1}"
         state.zones.put(zonename , resultZone.ZonesV2)
         def hubitatThermoAttrib = convertiZoneToHubitat(resultZone.ZonesV2)
         childSendEvent("${device.getDeviceNetworkId()}-$zonename",hubitatThermoAttrib)
-    }
+    }  
 }
 
 void componentSetCoolingSetpoint(cd,temperature) {
     if (enableDebug) log.debug "componentSetCoolingSetpoint() ${cd.displayName},$temperature"
-
-    def zoneIndex = (cd.getDeviceNetworkId().drop(cd.getDeviceNetworkId().size() - 1).toInteger())-1
+    
+    def zoneIndex = (cd.getDeviceNetworkId().drop(cd.getDeviceNetworkId().size() - 1).toInteger())-1    
     sendSimpleiZoneCmd("ZoneSetpoint",["Index":zoneIndex,"Setpoint":(temperature*100).toInteger()])
-
+    
     componentRefresh(cd)
 }
 
 void componentSetHeatingSetpoint(cd,temperature) {
     if (enableDebug) log.debug "componentSetHeatingSetpoint() ${cd.displayName},$temperature"
-
-    def zoneIndex = (cd.getDeviceNetworkId().drop(cd.getDeviceNetworkId().size() - 1).toInteger())-1
+    
+    def zoneIndex = (cd.getDeviceNetworkId().drop(cd.getDeviceNetworkId().size() - 1).toInteger())-1    
     sendSimpleiZoneCmd("ZoneSetpoint",["Index":zoneIndex,"Setpoint":(temperature*100).toInteger()])
 }
 
@@ -718,7 +721,7 @@ void componentSetSchedule(cd) {
 
 void componentSetThermostatFanMode(cd,fanmode) {
     if (enableDebug) log.debug "componentSetThermostatFanMode() ${cd.displayName},$fanmode"
-
+    
     if (childFanUpdatesMainFan) {
         setSpeed(fanmode)
     } else {
@@ -728,9 +731,9 @@ void componentSetThermostatFanMode(cd,fanmode) {
 
 void componentSetThermostatMode(cd,thermostatmode) {
     if (enableDebug) log.debug "componentSetThermostatMode() ${cd.displayName},$thermostatmode"
-
+    
     def zoneIndex = (cd.getDeviceNetworkId().drop(cd.getDeviceNetworkId().size() - 1).toInteger())-1
-    def zoneMode = getZoneModeLevel[thermostatmode]
+    def zoneMode = getZoneModeLevel[thermostatmode]    
     if (zoneMode) {
         sendSimpleiZoneCmd("ZoneMode",["Index":zoneIndex,"Mode":zoneMode])
         componentRefresh(cd)
